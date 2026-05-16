@@ -1,0 +1,150 @@
+# frozen_string_literal: true
+
+module EzLogsAgent
+  # Canonical sanitizer for "user-supplied data we're about to ship over
+  # the wire": HTTP params, GraphQL variables, and ActiveJob/Sidekiq
+  # arguments.
+  #
+  # Rules:
+  # - Sensitive keys (password / token / secret / api_key / credit_card,
+  #   plus user-configured patterns) are replaced with "[FILTERED]".
+  # - Nested objects recurse up to MAX_NESTING_DEPTH (3); anything deeper
+  #   collapses to "[Object]" so we never serialize unbounded graphs.
+  # - Arrays: small primitive arrays pass through; large ones (>5)
+  #   collapse to a preview-plus-count string; arrays of objects are
+  #   sanitized element-by-element with the same depth budget.
+  # - Non-primitive Ruby objects (anything not String/Numeric/Bool/nil)
+  #   become "[Object]". This protects us from accidentally serializing
+  #   ActiveRecord instances or other big graphs that found their way
+  #   into a job argument.
+  #
+  # The module is pure (no I/O, no state), so it's safe to call from
+  # any thread.
+  module Sanitizer
+    # Default sensitive-key patterns. Matched case-insensitively as
+    # SUBSTRINGS of the key, so `customer_password` matches `password`.
+    SENSITIVE_PATTERNS = %w[
+      password passwd pwd
+      token access_token refresh_token api_token auth_token
+      secret api_secret client_secret
+      api_key apikey private_key privatekey secret_key secretkey
+      credential auth authorization
+      encrypted encrypted_data
+      ssn social_security
+      credit_card card_number cvv cvc
+    ].freeze
+
+    # Hard ceiling for nested object recursion. Deeper structures
+    # collapse to the literal string "[Object]".
+    MAX_NESTING_DEPTH = 3
+
+    # Threshold above which an array is summarized instead of inlined.
+    # Below this size, primitive arrays are shipped verbatim; arrays
+    # of objects are mapped element-by-element.
+    MAX_ARRAY_DISPLAY_SIZE = 5
+
+    class << self
+      # Sanitize a single key/value pair. Public entry point used by
+      # HTTP-param and job-arg sanitization.
+      #
+      # @param key [String, Symbol] Variable / parameter name.
+      # @param value [Object] Variable / parameter value.
+      # @param depth [Integer] Current recursion depth.
+      # @return [Object] Sanitized value (may be the original primitive).
+      def sanitize_value(key, value, depth = 0)
+        return "[FILTERED]" if sensitive_key?(key)
+        return sanitize_nested_object(value, depth) if value.is_a?(Hash)
+        return sanitize_array_value(value, depth) if value.is_a?(Array)
+        return value if primitive?(value)
+
+        # Anything else (AR records, dates, custom objects) collapses to
+        # a placeholder so we never accidentally serialize a huge graph.
+        "[Object]"
+      end
+
+      # Sanitize an ordered list of job arguments (positional). Returns
+      # an Array with each element sanitized as if its index were the
+      # key (no sensitive-key match for integers — only the nested
+      # structure matters at the top level).
+      #
+      # @param args [Array] Job arguments array.
+      # @return [Array] Sanitized arguments array.
+      def sanitize_args(args)
+        return [] unless args.is_a?(Array)
+
+        # Top-level array uses the same array-rules so giant arg lists
+        # truncate to a preview-with-count rather than ship verbatim.
+        sanitize_array_value(args, 0)
+      end
+
+      # Check whether a key matches a sensitive pattern. Public so the
+      # HTTP middleware can short-circuit early on identical keys.
+      #
+      # @param key [String, Symbol]
+      # @return [Boolean]
+      def sensitive_key?(key)
+        key_lower = key.to_s.downcase
+        return true if SENSITIVE_PATTERNS.any? { |pattern| key_lower.include?(pattern) }
+
+        user_patterns = EzLogsAgent.configuration.excluded_graphql_variable_keys || []
+        user_patterns.any? { |pattern| key_lower.include?(pattern.to_s.downcase) }
+      rescue
+        # Defensive: when in doubt, treat as sensitive.
+        true
+      end
+
+      private
+
+      def sanitize_nested_object(hash, depth)
+        return "[Object]" if depth >= MAX_NESTING_DEPTH
+        return {} if hash.empty?
+
+        hash.each_with_object({}) do |(key, value), result|
+          result[key] = sanitize_value(key, value, depth + 1)
+        end
+      end
+
+      def sanitize_array_value(array, depth)
+        return [] if array.empty?
+
+        all_primitives = array.all? { |item| primitive?(item) }
+
+        if all_primitives
+          if array.size <= MAX_ARRAY_DISPLAY_SIZE
+            array
+          else
+            preview = array.first(MAX_ARRAY_DISPLAY_SIZE)
+            "#{preview}... (#{array.size} total)"
+          end
+        else
+          if array.size <= MAX_ARRAY_DISPLAY_SIZE
+            array.map { |item| sanitize_array_item(item, depth) }
+          else
+            preview = array.first(MAX_ARRAY_DISPLAY_SIZE).map { |item| sanitize_array_item(item, depth) }
+            { "_truncated" => true, "_count" => array.size, "_preview" => preview }
+          end
+        end
+      end
+
+      def sanitize_array_item(item, depth)
+        if primitive?(item)
+          item
+        elsif item.is_a?(Hash)
+          sanitize_nested_object(item, depth + 1)
+        elsif item.is_a?(Array)
+          sanitize_array_value(item, depth + 1)
+        else
+          "[Object]"
+        end
+      end
+
+      def primitive?(value)
+        value.nil? ||
+          value.is_a?(String) ||
+          value.is_a?(Numeric) ||
+          value.is_a?(TrueClass) ||
+          value.is_a?(FalseClass)
+      end
+    end
+  end
+end

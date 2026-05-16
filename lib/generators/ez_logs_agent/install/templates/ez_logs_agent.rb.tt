@@ -1,0 +1,128 @@
+# frozen_string_literal: true
+
+# EzLogsAgent Configuration
+#
+# All options below show their default values.
+# Uncomment and change only the options you need to customize.
+
+EzLogsAgent.configure do |config|
+  # =============================================================================
+  # REQUIRED SETTINGS
+  # =============================================================================
+
+  # URL of the EzLogs server (required)
+  # Default: nil (must be set for events to be sent)
+  # config.server_url = "https://your-ezlogs-server.com"
+
+  # API key for authentication (required)
+  # Get this from your EzLogs dashboard: Settings → API Keys
+  # Default: nil
+  # config.project_token = "your-api-key-here"
+
+  # =============================================================================
+  # CAPTURE SETTINGS
+  # =============================================================================
+
+  # Capture HTTP requests
+  # Default: true
+  # config.capture_http = true
+
+  # Capture background jobs (Sidekiq/ActiveJob)
+  # Default: true
+  # config.capture_jobs = true
+
+  # Capture database changes via model callbacks
+  # Default: true
+  # config.capture_database = true
+
+  # =============================================================================
+  # EXCLUSIONS
+  # =============================================================================
+
+  # Additional paths to exclude from HTTP capture (added to built-in defaults)
+  # Built-in: /rails/active_storage*, /assets*, /packs*, /vite*, /health*, /up, /favicon.ico
+  # config.excluded_paths = ["/admin*", "/internal*"]
+
+  # Additional tables to exclude from database capture (added to built-in defaults)
+  # Built-in: schema_migrations, ar_internal_metadata, sessions, session, active_storage_*, solid_queue_*, etc.
+  # config.excluded_tables = ["audit_logs", "versions"]
+
+  # Additional job classes to exclude from background job capture (added to built-in defaults)
+  # Built-in: SidekiqAlive::Worker, SolidQueue::CleanupJob, SolidQueue::RecurringJob
+  # config.excluded_job_classes = ["MyApp::HealthCheckJob", "MyApp::MetricsJob"]
+
+  # Additional GraphQL operations to exclude from capture (added to built-in defaults)
+  # Built-in: IntrospectionQuery, __* (all introspection fields like __schema, __type)
+  # Supports exact match and prefix match (patterns ending with *)
+  # config.excluded_graphql_operations = ["GetCurrentUser", "Internal*"]
+
+  # =============================================================================
+  # PERFORMANCE & RELIABILITY
+  # =============================================================================
+
+  # Max events in memory before oldest are dropped
+  # Default: 10000 (optimized for high-volume workloads)
+  # config.buffer_size = 10000
+
+  # Retry attempts for failed sends
+  # Default: 3
+  # config.retry_attempts = 3
+
+  # Seconds between automatic flushes
+  # Default: 3 (more frequent sends for better throughput)
+  # config.send_interval = 3
+
+  # =============================================================================
+  # LOGGING
+  # =============================================================================
+
+  # Agent log level (:debug, :info, :warn, :error)
+  # Default: :warn
+  # Set to :error in production to minimize output
+  # config.log_level = :warn
+
+  # =============================================================================
+  # DISPLAY NAMES (What Resource Was Affected?)
+  # =============================================================================
+
+  # Configure display name resolution per model
+  # When a database callback fires, the agent resolves a human-readable name
+  # for the affected record using the configured field.
+  #
+  # Fallback chain: configured field → name → title → number → nil
+  #
+  # Example:
+  # config.display_name_for = {
+  #   "User" => :email,    # Use email field for User models
+  #   "Product" => :name,  # Use name field for Product models
+  #   "Order" => :number   # Use number field for Order models
+  # }
+  #
+  # This enables action titles like:
+  # - "User updated 'john@example.com'" instead of just "User updated"
+  # - "Product created 'Premium Widget'" instead of just "Product created"
+  #
+  # IMPORTANT: Only use direct attributes, not associations (would trigger DB queries)
+
+  # =============================================================================
+  # ACTOR CONTEXT (Who Triggered This?)
+  # =============================================================================
+
+  # Optional: Extract actor (user identity) from HTTP requests
+  # This enables "who triggered this action?" tracking in EzLogs
+  #
+  # The hook receives (env, controller) and should return:
+  #   { id: String, label: String } or nil if actor cannot be determined
+  #
+  # Example for Devise:
+  # config.actor_from_request = ->(env, controller) {
+  #   return nil unless controller.respond_to?(:current_user)
+  #   user = controller.current_user
+  #   return nil unless user
+  #
+  #   {
+  #     id: user.id.to_s,
+  #     label: user.email
+  #   }
+  # }
+end
