@@ -1,12 +1,18 @@
 # Changelog
 
-## [0.1.4] — 2026-05-16
-
-### Changes
-
-- fix(agent): avoid autoloading SidekiqAdapter on non-Sidekiq hosts
-
 All notable changes to this project will be documented in this file.
+
+## [0.1.4] — 2026-05-17
+
+### Fixed
+- `ActiveJobCapturer#sidekiq_adapter?` no longer triggers Rails to
+  autoload `ActiveJob::QueueAdapters::SidekiqAdapter`. Rails registers
+  that constant for lazy autoload even when sidekiq isn't in the host's
+  bundle; the old `is_a?` check forced the adapter file to load, which
+  `require`s sidekiq and raised `Gem::LoadError: sidekiq is not part of
+  the bundle` on every job run for hosts using SolidQueue, GoodJob, or
+  any other non-Sidekiq adapter. The check now compares the adapter
+  class name string and never references the constant.
 
 ## [0.1.3] — 2026-05-17
 
