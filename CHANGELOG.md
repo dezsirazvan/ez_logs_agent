@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] — 2026-05-17
+
+### Fixed
+- Include `lib/tasks/ez_logs_agent.rake` in the published gem. 0.1.2's
+  gemspec used `lib/**/*.{rb,tt}` which didn't match `.rake` files; the
+  railtie's `rake_tasks do; load 'tasks/...'; end` then raised
+  `LoadError` on boot, breaking `assets:precompile` in any host app's
+  Docker build. 0.1.2 yanked.
+
+### Note
+- 0.1.0, 0.1.1, 0.1.2 are all yanked. Use 0.1.3 or later.
+
 ## [0.1.2] — 2026-05-16
 
 ### Fixed

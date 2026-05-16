@@ -26,7 +26,7 @@ Gem::Specification.new do |spec|
   # (CONFIGURATION/FAQ/QUICKSTART/RELEASING) live on the public repo
   # only — rubygems renders the README and that's what installers see.
   spec.files = Dir.chdir(__dir__) do
-    Dir["lib/**/*.{rb,tt}"] +
+    Dir["lib/**/*.{rb,rake,tt}"] +
       %w[README.md LICENSE.txt CHANGELOG.md]
   end
   spec.require_paths = ["lib"]
