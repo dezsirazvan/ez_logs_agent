@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4] — 2026-05-16
+
+### Changes
+
+- fix(agent): avoid autoloading SidekiqAdapter on non-Sidekiq hosts
+
 All notable changes to this project will be documented in this file.
 
 ## [0.1.3] — 2026-05-17

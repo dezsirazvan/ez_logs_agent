@@ -176,12 +176,17 @@ module EzLogsAgent
 
         # Checks if job uses Sidekiq adapter.
         #
+        # Compares by class name string rather than `is_a?` against the
+        # SidekiqAdapter constant. Rails registers `ActiveJob::QueueAdapters::SidekiqAdapter`
+        # for lazy autoload even when sidekiq isn't in the bundle; touching
+        # the constant triggers Zeitwerk to load the adapter file, which
+        # `require`s sidekiq and raises Gem::LoadError on hosts running a
+        # different adapter (e.g. SolidQueue).
+        #
         # @param job [ActiveJob::Base] The job instance
         # @return [Boolean] true if Sidekiq adapter, false otherwise
         def sidekiq_adapter?(job)
-          return false unless defined?(ActiveJob::QueueAdapters::SidekiqAdapter)
-
-          job.class.queue_adapter.is_a?(ActiveJob::QueueAdapters::SidekiqAdapter)
+          job.class.queue_adapter.class.name == "ActiveJob::QueueAdapters::SidekiqAdapter"
         rescue StandardError
           false
         end
