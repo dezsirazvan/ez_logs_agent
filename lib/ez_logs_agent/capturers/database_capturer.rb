@@ -60,7 +60,16 @@ module EzLogsAgent
       # Previously we filtered them out, but this loses important context.
       # FOREIGN_KEY_PATTERN = /_id\z/  # Removed January 2026
 
-      # Patterns for sensitive data to ignore
+      # Patterns for sensitive data to ignore.
+      #
+      # The first source of truth is `record.class.encrypted_attributes`
+      # (Rails 7+ `encrypts :foo` declaration) — see encrypted_attribute?.
+      # If the host app encrypted it, we never capture it.
+      #
+      # This list is the secondary defense: column names that frequently
+      # carry sensitive material even when the host app didn't declare
+      # `encrypts` (legacy code, manual hashing, externally-generated
+      # material). Matching is substring + case-insensitive.
       SENSITIVE_PATTERNS = %w[
         password
         token
@@ -70,6 +79,16 @@ module EzLogsAgent
         ssn
         social_security
         encrypted
+        private_key
+        public_key
+        signing_key
+        pem
+        cipher
+        nonce
+        salt
+        digest
+        signature
+        hmac
       ].freeze
 
 
@@ -276,8 +295,9 @@ module EzLogsAgent
           changes = model.saved_changes
           return nil if changes.nil? || changes.empty?
 
-          # Find meaningful changes
-          meaningful_changes = filter_meaningful_changes(changes)
+          # Find meaningful changes (excludes encrypted columns + sensitive
+          # name patterns — see meaningful_attribute? / encrypted_attribute?)
+          meaningful_changes = filter_meaningful_changes(changes, model)
           return nil if meaningful_changes.empty?
 
           # Build context with all meaningful changes
@@ -305,7 +325,7 @@ module EzLogsAgent
 
           # Filter to meaningful, non-nil scalar attributes
           meaningful_attrs = attributes.select do |attribute, value|
-            meaningful_attribute?(attribute) &&
+            meaningful_attribute?(attribute, model) &&
               scalar?(value) &&
               !value.nil?
           end
@@ -324,20 +344,27 @@ module EzLogsAgent
         # Filters changes to only meaningful business attributes
         #
         # @param changes [Hash] The saved_changes hash
+        # @param model [ActiveRecord::Base] The model instance (used to
+        #   consult `record.class.encrypted_attributes` so columns declared
+        #   `encrypts :foo` are never captured, regardless of their name).
         # @return [Array<Array>] Array of [attribute, [from, to]] pairs
-        def filter_meaningful_changes(changes)
+        def filter_meaningful_changes(changes, model)
           changes.select do |attribute, (from, to)|
-            meaningful_attribute?(attribute) &&
+            meaningful_attribute?(attribute, model) &&
               scalar_values?(from, to) &&
               values_actually_changed?(from, to)
           end.to_a
         end
 
-        # Checks if an attribute is meaningful (not technical/ignored)
+        # Checks if an attribute is meaningful (not technical/ignored).
         #
         # @param attribute [String] The attribute name
+        # @param model [ActiveRecord::Base, nil] The model instance — when
+        #   supplied, columns declared `encrypts :foo` on the model class
+        #   are dropped regardless of name. Authoritative drop: if the host
+        #   app encrypted the column, we never capture it.
         # @return [Boolean]
-        def meaningful_attribute?(attribute)
+        def meaningful_attribute?(attribute, model = nil)
           attr_str = attribute.to_s
 
           # Skip explicitly ignored attributes
@@ -347,13 +374,41 @@ module EzLogsAgent
           # relationship changes (e.g., assigned_to_id changing from user A to user B)
           # Previously filtered via FOREIGN_KEY_PATTERN - removed January 2026
 
-          # Skip sensitive data
+          # Authoritative: drop anything the host app declared `encrypts` on.
+          # Rails decrypts at the attribute layer before saved_changes fires,
+          # so without this check the plaintext would land on the wire.
+          return false if model && encrypted_attribute?(attr_str, model)
+
+          # Skip name-pattern-sensitive data (legacy / non-encrypts paths).
           return false if sensitive_attribute?(attr_str)
 
           true
         end
 
-        # Checks if attribute name contains sensitive patterns
+        # Checks whether the host app declared `encrypts :<attribute>` on
+        # this model's class. Available since Rails 7.0 via
+        # ActiveRecord::Encryption::EncryptableRecord#encrypted_attributes.
+        #
+        # Safe across host Rails versions: returns false if the API isn't
+        # present (older Rails, non-AR records).
+        #
+        # @param attribute [String] The attribute name (already to_s'd)
+        # @param model [ActiveRecord::Base] The model instance
+        # @return [Boolean]
+        def encrypted_attribute?(attribute, model)
+          klass = model.class
+          return false unless klass.respond_to?(:encrypted_attributes)
+
+          encrypted = klass.encrypted_attributes
+          return false if encrypted.nil? || encrypted.empty?
+
+          encrypted.map(&:to_s).include?(attribute)
+        rescue StandardError
+          false
+        end
+
+        # Checks if attribute name contains sensitive patterns.
+        # Secondary check — see SENSITIVE_PATTERNS comment.
         #
         # @param attribute [String] The attribute name
         # @return [Boolean]

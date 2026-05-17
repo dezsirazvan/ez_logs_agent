@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] — 2026-05-17 — security release
+
+### Security
+- `DatabaseCapturer` no longer captures columns the host app declared
+  `encrypts :foo` on. Rails 7+ decrypts attributes in memory before
+  `saved_changes` fires, so without this guard the plaintext of every
+  encrypted column was landing on the wire and in the EZLogs UI on
+  every create / update. The new policy is declarative: at capture
+  time we read `record.class.encrypted_attributes` (Rails 7+) and drop
+  every name in that set, regardless of column name. If the host app
+  encrypted it, we never capture it. Upgrade is strongly recommended
+  for any deployment whose models use `encrypts`. Customers running
+  0.1.4 or earlier should also scrub historical events for the
+  affected column names — the data leaked in the past will stay in
+  the event store until masked.
+- `SENSITIVE_PATTERNS` (the secondary name-based denylist) now also
+  matches `private_key`, `public_key`, `signing_key`, `pem`, `cipher`,
+  `nonce`, `salt`, `digest`, `signature`, `hmac`. Belt-and-suspenders
+  for columns that carry sensitive material but weren't declared
+  `encrypts` (legacy code, manual hashing, externally-generated
+  material).
+
 ## [0.1.4] — 2026-05-17
 
 ### Fixed
