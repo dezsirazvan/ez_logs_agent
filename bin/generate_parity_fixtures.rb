@@ -132,6 +132,61 @@ write_fixture "http_failure_exception", EzLogsAgent::EventBuilder.build(
   timestamp: FIXED_TIMESTAMP
 )
 
+# Agent actor — Claude (or any AI) acting on its own, no human principal.
+# Drives the "Claude updated employee" framing on the server's
+# AiExplainer.
+write_fixture "http_get_actor_agent", EzLogsAgent::EventBuilder.build(
+  source_type: "http_request",
+  source_data: {
+    method: "POST",
+    path: "/api/employees/42",
+    status_code: 200,
+    controller: "app/api/employees/[id]",
+    action: "POST",
+    format: "json",
+    user_agent: "Anthropic-Claude/1.0",
+    remote_ip: "203.0.113.7"
+  },
+  outcome: "success",
+  correlation_id: FIXED_CORRELATION_ID,
+  resource_ids: [{ resource_type: "Employee", resource_id: "42" }],
+  context: {
+    actor: { id: "claude-3-5-sonnet", label: "Claude", kind: "agent" }
+  },
+  duration_ms: 312,
+  timestamp: FIXED_TIMESTAMP
+)
+
+# Hybrid actor — an agent acting on behalf of a named human principal.
+# The principal sub-structure is what drives the "Claude updated
+# employee, on behalf of Alex" framing.
+write_fixture "http_get_actor_hybrid", EzLogsAgent::EventBuilder.build(
+  source_type: "http_request",
+  source_data: {
+    method: "POST",
+    path: "/api/employees/42",
+    status_code: 200,
+    controller: "app/api/employees/[id]",
+    action: "POST",
+    format: "json",
+    user_agent: "Anthropic-Claude/1.0",
+    remote_ip: "203.0.113.7"
+  },
+  outcome: "success",
+  correlation_id: FIXED_CORRELATION_ID,
+  resource_ids: [{ resource_type: "Employee", resource_id: "42" }],
+  context: {
+    actor: {
+      id: "claude-3-5-sonnet",
+      label: "Claude",
+      kind: "hybrid",
+      principal: { id: "u-99", label: "Alex Liu" }
+    }
+  },
+  duration_ms: 312,
+  timestamp: FIXED_TIMESTAMP
+)
+
 # ---- Database scenarios ----
 
 write_fixture "db_create", EzLogsAgent::EventBuilder.build(

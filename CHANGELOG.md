@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] — 2026-05-24
+
+### Added
+- Optional `actor.principal` sub-field (`{ id:, label? }`) on the wire,
+  carrying the human a `kind: "agent"` or `kind: "hybrid"` actor is
+  acting on behalf of. Drops silently if malformed; existing callers
+  unaffected. Lets the server narrate agent actions as
+  "Claude updated employee, on behalf of Razvan" instead of
+  attributing the change to either party alone.
+
+### Internal
+- Dropped a stray gemspec bump to `sidekiq ~> 8.1` that landed via an
+  auto-merged dependabot PR without re-resolving `Gemfile.lock`. Dev
+  deps are back in sync with the lockfile (`rails ~> 7.0`,
+  `sqlite3 ~> 1.6`, `sidekiq ~> 7.0`); no runtime change for customers.
+
 ## [0.1.5] — 2026-05-17 — security release
 
 ### Security

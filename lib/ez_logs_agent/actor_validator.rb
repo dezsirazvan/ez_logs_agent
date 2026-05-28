@@ -5,9 +5,15 @@ module EzLogsAgent
   #
   # Actor schema:
   # {
-  #   id: String,               # REQUIRED, stable identifier
-  #   label: String | nil,      # optional, human-readable display
-  #   kind: String | nil        # optional, one of human|agent|system|hybrid
+  #   id: String,                       # REQUIRED, stable identifier
+  #   label: String | nil,              # optional, human-readable display
+  #   kind: String | nil,               # optional, one of human|agent|system|hybrid
+  #   principal: { id:, label? } | nil  # optional, only meaningful when
+  #                                     # kind == "hybrid": the human who
+  #                                     # authorized the agent. Drives the
+  #                                     # "Claude updated employee, on
+  #                                     # behalf of Razvan" framing on the
+  #                                     # server's AiExplainer.
   # }
   #
   # This module ensures actors conform to the expected structure
@@ -46,11 +52,34 @@ module EzLogsAgent
         id = actor[:id] || actor["id"]
         label = actor[:label] || actor["label"]
         kind = actor[:kind] || actor["kind"]
+        principal = actor[:principal] || actor["principal"]
 
         result = { id: id.to_s }
         result[:label] = label.to_s if label
         result[:kind] = kind.to_s if kind && VALID_KINDS.include?(kind.to_s)
+        sanitized_principal = sanitize_principal(principal)
+        result[:principal] = sanitized_principal if sanitized_principal
 
+        result
+      end
+
+      private
+
+      # Sanitize the optional principal sub-structure. Reuses the same
+      # "id required, label optional" shape as the top-level actor — but
+      # principals are always human, so no `kind` field. Returns nil if
+      # the principal is missing or malformed (we drop silently rather
+      # than rejecting the whole actor; principal is purely advisory).
+      def sanitize_principal(principal)
+        return nil if principal.nil?
+        return nil unless principal.is_a?(Hash)
+
+        id = principal[:id] || principal["id"]
+        return nil if id.nil? || id.to_s.empty?
+
+        result = { id: id.to_s }
+        label = principal[:label] || principal["label"]
+        result[:label] = label.to_s if label
         result
       end
     end
