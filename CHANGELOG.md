@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] — 2026-05-28
+
+### Changed
+- Gem `homepage` now points at the product site (`https://ezlogs.io/`)
+  instead of the GitHub mirror, so the RubyGems "Homepage" link sends
+  installers to the product. `source_code_uri` still points at the
+  mirror. Metadata-only release; no code or wire change.
+
 ## [0.1.6] — 2026-05-24
 
 ### Added

@@ -1,10 +1,12 @@
 # EZLogs Agent
 
+[Website](https://ezlogs.io/) · [Documentation](https://ezlogs.io/rails/) · [Next.js sister agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs)
+
 **Drop-in activity logging for Rails applications.**
 
 EZLogs Agent captures what happens in your Rails app — HTTP requests, background jobs, database changes — and sends them to the EZLogs server, where they're transformed into human-readable stories that anyone on your team can understand.
 
-Wire-format identical to the [Next.js sister agent](https://github.com/dezsirazvan/ez_logs/tree/master/ez_logs_agent_nextjs) (`@ezlogs/nextjs`). Same server ingests both. Use Rails on the back end and Next.js on the front end? You see one unified Action timeline.
+Wire-format identical to the [Next.js sister agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs) (`ezlogs-nextjs` on npm). Same server ingests both. Use Rails on the back end and Next.js on the front end? You see one unified Action timeline.
 
 ---
 

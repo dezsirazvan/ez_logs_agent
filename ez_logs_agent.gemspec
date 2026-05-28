@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
 
   spec.summary = "Captures Rails application activity for EzLogs"
   spec.description = "Captures HTTP requests, background jobs, and database changes from Rails applications. Events are automatically correlated and sent to EzLogs Server, where they are transformed into human-readable activity stories."
-  spec.homepage = "https://github.com/dezsirazvan/ez_logs_agent"
+  spec.homepage = "https://ezlogs.io/"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
 
