@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] — 2026-05-29
+
+### Changed
+- Install template (`rails generate ez_logs_agent:install`) now
+  pre-fills `config.server_url` with the real SaaS endpoint
+  (`https://app.ezlogs.io`) and `config.project_token` with
+  `ENV["EZLOGS_API_KEY"]`, uncommented. Self-hosters override via
+  `ENV["EZLOGS_SERVER_URL"]`. New customers only need to set one
+  env var (the API key); they no longer have to know to uncomment
+  the URL line or guess the right value.
+- Documentation (`QUICKSTART.md`, `CONFIGURATION.md`, `FAQ.md`) uses
+  the real product URLs (`app.ezlogs.io`, `ezlogs.io/pricing`)
+  instead of `your-ezlogs-server.com` placeholders.
+
+No wire-format or runtime-behavior changes. Existing customers'
+already-generated initializer files are untouched — the generator
+doesn't rewrite them. Only fresh installs see the new defaults.
+
 ## [0.1.7] — 2026-05-28
 
 ### Changed

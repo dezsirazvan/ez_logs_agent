@@ -511,7 +511,7 @@ Database capture requires ActiveRecord callbacks.
 
 ### Is EZLogs free?
 
-See pricing at [your-ezlogs-server.com/pricing](https://your-ezlogs-server.com/pricing)
+See pricing at [ezlogs.io/pricing](https://ezlogs.io/pricing)
 
 The agent gem is open-source (MIT license). The hosted EZLogs server is a paid SaaS service.
 

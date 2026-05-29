@@ -30,7 +30,7 @@ The URL of your EZLogs server where events will be sent.
 
 **Example:**
 ```ruby
-config.server_url = "https://your-ezlogs-server.com"
+config.server_url = "https://app.ezlogs.io"
 ```
 
 **Validation:**
@@ -39,8 +39,8 @@ config.server_url = "https://your-ezlogs-server.com"
 - Must be a valid URL format
 
 **Common values:**
-- Production: `https://your-ezlogs-server.com`
-- Staging: `https://staging.your-ezlogs-server.com`
+- EZLogs SaaS: `https://app.ezlogs.io`
+- Self-hosted: your own deployment URL
 - Development: `http://localhost:3000`
 
 ---
@@ -616,7 +616,7 @@ end
 ### Example `.env` File
 
 ```bash
-EZLOGS_SERVER_URL=https://your-ezlogs-server.com
+EZLOGS_SERVER_URL=https://app.ezlogs.io
 EZLOGS_API_KEY=ezl_your_api_key_here
 
 # Optional

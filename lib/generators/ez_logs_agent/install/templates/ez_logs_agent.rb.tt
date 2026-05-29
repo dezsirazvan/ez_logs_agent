@@ -10,14 +10,13 @@ EzLogsAgent.configure do |config|
   # REQUIRED SETTINGS
   # =============================================================================
 
-  # URL of the EzLogs server (required)
-  # Default: nil (must be set for events to be sent)
-  # config.server_url = "https://your-ezlogs-server.com"
+  # URL of the EzLogs server. Defaults to the EzLogs SaaS endpoint, which is
+  # the same URL for every customer — tenants are identified by API key, not
+  # by URL. Override only if you self-host.
+  config.server_url = ENV.fetch("EZLOGS_SERVER_URL", "https://app.ezlogs.io")
 
-  # API key for authentication (required)
-  # Get this from your EzLogs dashboard: Settings → API Keys
-  # Default: nil
-  # config.project_token = "your-api-key-here"
+  # API key for your tenant. Get one at https://app.ezlogs.io/settings/api-keys.
+  config.project_token = ENV["EZLOGS_API_KEY"]
 
   # =============================================================================
   # CAPTURE SETTINGS

@@ -10,7 +10,7 @@ Before you begin, make sure you have:
 
 - ✅ **Ruby** 3.1.0 or higher
 - ✅ **Rails** application (any recent version)
-- ✅ **EZLogs account** with an API key ([sign up here](https://your-ezlogs-server.com))
+- ✅ **EZLogs account** with an API key ([sign up here](https://app.ezlogs.io))
 
 **Optional but supported:**
 - Sidekiq or ActiveJob (for background job capture)
@@ -62,7 +62,7 @@ rails generate ez_logs_agent:install
 
 ## Step 3: Get Your API Key
 
-1. **Sign up** for EZLogs at [your-ezlogs-server.com](https://your-ezlogs-server.com)
+1. **Sign up** for EZLogs at [app.ezlogs.io](https://app.ezlogs.io)
 2. **Create a company** (happens automatically during registration)
 3. **Navigate to Settings** → **API Keys**
 4. **Click "Create New API Key"**
@@ -74,43 +74,20 @@ rails generate ez_logs_agent:install
 
 ## Step 4: Configure the Agent
 
-Open `config/initializers/ez_logs_agent.rb` and add your credentials:
-
-```ruby
-EzLogsAgent.configure do |config|
-  # Required: Your EZLogs server URL
-  config.server_url = "https://your-ezlogs-server.com"
-
-  # Required: Your API key from Step 3
-  config.project_token = "ezl_your_api_key_here"
-end
-```
-
-### Using Environment Variables (Recommended)
-
-For better security, use environment variables:
-
-```ruby
-EzLogsAgent.configure do |config|
-  config.server_url = ENV['EZLOGS_SERVER_URL']
-  config.project_token = ENV['EZLOGS_API_KEY']
-end
-```
-
-Then set them in your environment:
+The generator already wrote `config/initializers/ez_logs_agent.rb` with sensible defaults — `server_url` points at `https://app.ezlogs.io` (the same URL for every SaaS customer) and `project_token` reads from `ENV["EZLOGS_API_KEY"]`. The only thing you need to set is the API key.
 
 ```bash
-# .env (for development, using dotenv gem)
-EZLOGS_SERVER_URL=https://your-ezlogs-server.com
+# .env (development, with the dotenv gem)
 EZLOGS_API_KEY=ezl_your_api_key_here
 
-# Production (set via your hosting platform)
-# Heroku: heroku config:set EZLOGS_API_KEY=ezl_...
-# Render: Set in environment variables dashboard
-# etc.
+# Production — set via your hosting platform:
+# Heroku:  heroku config:set EZLOGS_API_KEY=ezl_...
+# Render / Fly / Railway: set in the env-vars dashboard
 ```
 
-**Note:** The configuration parameter is called `project_token`, but it's your API key from the EZLogs dashboard.
+If you self-host the EzLogs server, also set `EZLOGS_SERVER_URL` to your deployment URL — the generated initializer reads it from `ENV["EZLOGS_SERVER_URL"]` automatically.
+
+**Note:** The config setter is called `project_token`, but the value is the API key you copied in Step 3.
 
 ---
 
@@ -125,7 +102,7 @@ rails ez_logs_agent:test_connection
 ### ✅ Success Output
 
 ```
-[EzLogsAgent] Testing connection to https://your-ezlogs-server.com...
+[EzLogsAgent] Testing connection to https://app.ezlogs.io...
 ✅ Configuration is valid
 ✅ Connection successful (HTTP 200)
 ✅ Test event sent successfully
@@ -185,7 +162,7 @@ Check your Rails logs for the startup message:
 
 ```
 [EzLogsAgent] Agent initialized successfully
-[EzLogsAgent] Server URL: https://your-ezlogs-server.com
+[EzLogsAgent] Server URL: https://app.ezlogs.io
 [EzLogsAgent] ✓ HTTP capture enabled
 [EzLogsAgent] ✓ Sidekiq capture enabled
 [EzLogsAgent] ✓ Database capture enabled
@@ -222,7 +199,7 @@ WelcomeEmailJob.perform_later(user)
 
 ## Step 8: View Your Activity Log
 
-1. **Open your EZLogs dashboard** at [your-ezlogs-server.com](https://your-ezlogs-server.com)
+1. **Open your EZLogs dashboard** at [app.ezlogs.io](https://app.ezlogs.io)
 2. **Navigate to the Timeline** (usually the home page)
 3. **See your activity** appear in real-time!
 
@@ -371,7 +348,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for all available options.
 
 ### How much does it cost?
 
-See pricing at [your-ezlogs-server.com/pricing](https://your-ezlogs-server.com/pricing)
+See pricing at [ezlogs.io/pricing](https://ezlogs.io/pricing)
 
 ---
 
