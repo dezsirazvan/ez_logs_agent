@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.9] — 2026-06-05
+
+### Fixed
+- `Sanitizer` no longer collapses ActiveJob record references
+  (`{"_aj_globalid" => "gid://app/Model/id"}`) to `"[Object]"` at the
+  depth-3 cap. These one-key wrapper hashes pass through verbatim so
+  the server can display *which* record a job ran on
+  (e.g. ActionMailer's `Record 1` field now reads `User #42` instead
+  of `[Object]`).
+
+The carve-out is narrow: only the exact `{"_aj_globalid" => "gid://..."}`
+shape is exempt. Multi-key hashes, non-GID values, and any other
+nested structure still hit the existing graph-protection rules
+(depth cap, array truncation, non-primitive collapse) unchanged. No
+wire-format change.
+
 ## [0.1.8] — 2026-05-29
 
 ### Changed
