@@ -102,12 +102,41 @@ module EzLogsAgent
         # record the job ran on. Display formatting (gid → "User #42") is
         # the server's job; the agent's job is to keep the data on the wire.
         return hash if global_id_hash?(hash)
+
+        # ActiveJob wraps keyword args at TWO layers: the outer mailer
+        # payload `{"args" => [kwargs_hash], "_aj_ruby2_keywords" => ["args"]}`
+        # and the inner kwargs hash itself, also tagged `_aj_ruby2_keywords`.
+        # Each wrapper layer is framework noise — recursing into it without
+        # spending depth budget keeps the real kwargs from collapsing to
+        # "[Object]" at depth 3. Sensitive-key filtering still runs on the
+        # real entries (passwords don't leak; the wrapper just doesn't cost
+        # a depth level).
+        return sanitize_ruby2_keywords_wrapper(hash, depth) if ruby2_keywords_wrapper?(hash)
+
         return "[Object]" if depth >= MAX_NESTING_DEPTH
         return {} if hash.empty?
 
         hash.each_with_object({}) do |(key, value), result|
           result[key] = sanitize_value(key, value, depth + 1)
         end
+      end
+
+      # Sanitize the entries of an _aj_ruby2_keywords wrapper at the SAME
+      # depth as the wrapper itself, then re-attach the marker. This is what
+      # lets kwargs survive past the depth-3 cap when they're wrapped at
+      # depth 2-3 by the outer mailer payload.
+      def sanitize_ruby2_keywords_wrapper(hash, depth)
+        result = {}
+        hash.each do |key, value|
+          if ruby2_keywords_marker_key?(key)
+            # Preserve the marker verbatim — it's used to identify the
+            # wrapper on the receiving side, not to display.
+            result[key] = value
+          else
+            result[key] = sanitize_value(key, value, depth)
+          end
+        end
+        result
       end
 
       def sanitize_array_value(array, depth)
@@ -160,6 +189,21 @@ module EzLogsAgent
         return false unless hash.is_a?(Hash) && hash.size == 1
         gid = hash["_aj_globalid"] || hash[:_aj_globalid]
         gid.is_a?(String) && gid.start_with?("gid://")
+      end
+
+      # True iff `hash` carries the `_aj_ruby2_keywords` marker. ActiveJob
+      # uses this marker on any hash that originated as a keyword-argument
+      # splat (so the framework can re-splat on deserialize). Used to skip
+      # the depth penalty for these framework wrappers — the marker's
+      # presence is the unambiguous signal we're inside an ActiveJob
+      # serialization layer, not customer data.
+      def ruby2_keywords_wrapper?(hash)
+        return false unless hash.is_a?(Hash)
+        hash.key?("_aj_ruby2_keywords") || hash.key?(:_aj_ruby2_keywords)
+      end
+
+      def ruby2_keywords_marker_key?(key)
+        key.to_s == "_aj_ruby2_keywords"
       end
     end
   end

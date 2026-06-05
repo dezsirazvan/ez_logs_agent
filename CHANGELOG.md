@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.10] — 2026-06-05
+
+### Fixed
+- `Sanitizer` no longer collapses ActiveJob keyword-argument hashes
+  (those tagged with `_aj_ruby2_keywords`) to `"[Object]"` at the
+  depth-3 cap. ActionMailer puts kwargs at two wrapper layers — an
+  outer `{"args" => [kwargs_hash], "_aj_ruby2_keywords" => ["args"]}`
+  payload and the kwargs hash itself, also marked. Each layer is
+  framework noise; the depth budget now skips them so real kwargs
+  survive the wire (e.g. `CompanyMailer.deleted(admin_email:, ...)`
+  now ships `admin_email`/`company_name`/`deleted_at` instead of a
+  single `"[Object]"`).
+
+The carve-out is narrow: only hashes that actually carry the
+`_aj_ruby2_keywords` marker are exempt. Customer-data hashes
+without the marker still hit the depth cap unchanged, and
+sensitive-key filtering (passwords, tokens, …) still runs on the
+real kwargs entries — the wrapper is free to descend into, but
+nothing inside it is exempt from masking. No wire-format change.
+
 ## [0.1.9] — 2026-06-05
 
 ### Fixed
