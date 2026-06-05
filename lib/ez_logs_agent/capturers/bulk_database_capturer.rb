@@ -108,15 +108,106 @@ module EzLogsAgent
         def install
           return if @installed
 
-          @subscriber = ::ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
-            payload = args.last
-            event_name = args.first
-            started = args[1]
-            finished = args[2]
-            handle_notification(event_name, started, finished, payload)
+          # Cache configuration values that the hot path checks per
+          # notification. Re-read on every install (specs reinstall
+          # after toggling config). Runtime mutations to these settings
+          # require uninstall! + install to take effect — acceptable
+          # because nobody flips this at runtime in production.
+          @capture_enabled =
+            begin
+              ::EzLogsAgent.configuration.capture_database
+            rescue StandardError
+              false
+            end
+          @excluded_tables =
+            begin
+              ::EzLogsAgent.configuration.all_excluded_tables.dup.freeze
+            rescue StandardError
+              [].freeze
+            end
+
+          install_row_count_capture!
+
+          # 5-arity block bypasses the `*args` splat allocation per
+          # notification — measurable on hot paths where we ignore
+          # ~99% of events. Block accepts positional args matching the
+          # AS::N convention: (name, start, finish, id, payload).
+          @subscriber = ::ActiveSupport::Notifications.subscribe("sql.active_record") do |name, started, finished, _id, payload|
+            handle_notification(name, started, finished, payload)
           end
           @installed = true
         end
+
+        # Patches ActiveRecord::Relation's bulk methods to backfill the
+        # affected-row count on the most recently captured bulk_database
+        # event. See the comment on RelationRowCountStash below for why
+        # this is necessary (Rails' payload[:row_count] is unreliable
+        # for plain DELETE/UPDATE on PG).
+        def install_row_count_capture!
+          return if @relation_patched
+          return unless defined?(::ActiveRecord::Relation)
+
+          ::ActiveRecord::Relation.prepend(RelationRowCountStash)
+          @relation_patched = true
+        rescue StandardError => e
+          # Patching is best-effort — if AR's Relation isn't there or the
+          # prepend raises, the capturer still works with payload[:row_count].
+          ::EzLogsAgent::Logger.debug("[BulkDatabaseCapturer] could not patch Relation: #{e.class}: #{e.message}")
+        end
+
+        # Patches the row_count on the most recently buffered bulk_database
+        # event when its model matches `model_class`. Called from the
+        # RelationRowCountStash module immediately after `super` returns
+        # from delete_all / update_all. The buffer's `peek_last` API is
+        # the lightweight read path; we mutate in place because the
+        # event hash hasn't been serialized yet.
+        def backfill_row_count(real_count, model_class)
+          return if real_count.nil?
+
+          tail = ::EzLogsAgent::Buffer.peek_last
+          return unless tail.is_a?(Hash)
+          return unless tail[:source_type] == "bulk_database"
+          return unless tail.dig(:source_data, :model_class) == model_class.name
+
+          tail[:source_data][:row_count] = real_count
+          if (rids = tail[:resource_ids]).is_a?(Array) && rids.first.is_a?(Hash)
+            rids.first[:resource_id] = "bulk:#{real_count}"
+          end
+        rescue StandardError => e
+          ::EzLogsAgent::Logger.debug("[BulkDatabaseCapturer] backfill_row_count failed: #{e.class}: #{e.message}")
+        end
+      end
+
+      # Backfills the affected-row count on the most recently captured
+      # bulk_database event. Order of operations:
+      #
+      #   1. Customer calls Relation#delete_all (or update_all).
+      #   2. AR runs the SQL → sql.active_record fires → our AS::N
+      #      handler captures the event with row_count=payload[:row_count]
+      #      (often 0 on PG for plain DELETE).
+      #   3. delete_all's super returns the affected count to us.
+      #   4. We patch the most-recently-buffered bulk_database event's
+      #      source_data[:row_count] AND its sentinel resource_id so the
+      #      timeline shows the real number.
+      #
+      # This is a thin shim — only the count is touched, never the SQL,
+      # context, or wire shape. If the buffer's tail isn't a bulk_database
+      # event for our model (e.g. AS::N skipped it), we leave it alone.
+      module RelationRowCountStash
+        def delete_all
+          result = super
+          ::EzLogsAgent::Capturers::BulkDatabaseCapturer.backfill_row_count(result, klass) if result.is_a?(Integer)
+          result
+        end
+
+        def update_all(*args, **kwargs, &block)
+          result = super
+          ::EzLogsAgent::Capturers::BulkDatabaseCapturer.backfill_row_count(result, klass) if result.is_a?(Integer)
+          result
+        end
+      end
+
+      class << self
 
         # Removes the subscription. Specs use this between examples to
         # avoid leaked subscribers; production never calls it.
@@ -132,8 +223,22 @@ module EzLogsAgent
         # tools listening on the same channel. Hard rule: bulk capture failures
         # never propagate.
         def handle_notification(_event_name, started, finished, payload)
-          return unless capture_enabled?
-          return unless eligible_payload?(payload)
+          # Hot path: this runs once per SQL statement in the host app —
+          # often thousands of times per second on a busy tenant. EVERY
+          # branch above the cheapest filter has to be fast. Order is:
+          #
+          #   1. Cheapest possible name check (string suffix, no regex,
+          #      no method dispatch on the configuration object). This
+          #      rejects ~99% of notifications in <1 µs.
+          #   2. Then capture_enabled? (config check).
+          #   3. Then everything else.
+          # Cheapest possible early-exit: a single instance-variable
+          # read. This branch fires on EVERY SQL statement in the host
+          # app and must not allocate or call into configuration.
+          return unless @capture_enabled
+          return unless payload.is_a?(Hash)
+          name = payload[:name]
+          return unless name && name_eligible?(name)
 
           operation = ::EzLogsAgent::BulkSqlParser.detect_operation(payload[:sql])
           return unless operation
@@ -146,6 +251,27 @@ module EzLogsAgent
             sql: payload[:sql],
             type_casted_binds: payload[:type_casted_binds]
           )
+
+          # Drop Rails framework rewrites that aren't real business activity:
+          #
+          #   * Foreign-key nullification — when a parent has `dependent:
+          #     :restrict_with_error` AND the child's `belongs_to :parent`
+          #     is `optional: true`, Rails rewrites `child.delete_all`
+          #     into `UPDATE children SET parent_id = NULL WHERE ...`
+          #     before the destroy. There is no business meaning here;
+          #     it's framework cleanup before the parent goes away.
+          #
+          #   * Counter-cache / increment! — `Model.increment_counter(:x)`
+          #     and `record.increment!(:x)` compile to
+          #     `UPDATE ... SET x = COALESCE(x, 0) + N WHERE id = ?`,
+          #     which is Rails plumbing for a numeric counter bump, not
+          #     a user-visible change.
+          #
+          # Both produce high-volume noise on the timeline (see EZLogs's
+          # own dogfood where Company#increment_actions_count! fires
+          # per ingest batch). Filtering at the capturer means they
+          # don't ride the wire at all.
+          return if framework_rewrite?(operation, parse_result)
 
           source_data = build_source_data(
             operation: operation,
@@ -183,11 +309,21 @@ module EzLogsAgent
         # @return [Boolean]
         def eligible_payload?(payload)
           return false unless payload.is_a?(Hash)
+          name = payload[:name]
+          name.is_a?(String) && name_eligible?(name)
+        end
 
-          name = payload[:name].to_s
-          return false if name.empty?
-
-          BULK_NAME_HINT.match?(name)
+        # Cheapest possible bulk-name check — string `end_with?` calls,
+        # no regex compilation, no method dispatch. Runs on the hot path.
+        # The four shapes we care about (per AR convention):
+        #   "<Model> Delete All", "<Model> Update All",
+        #   "<Model> Insert", "<Model> Upsert"
+        # (Older Rails 7 also used " Bulk Insert" / " Bulk Upsert" — those
+        # still end with "Insert"/"Upsert" so end_with? catches them.)
+        # Per-row CRUD names like "<Model> Create", "<Model> Update",
+        # "<Model> Destroy" fail all four suffix checks and bail in <1 µs.
+        def name_eligible?(name)
+          name.end_with?(" All") || name.end_with?(" Insert") || name.end_with?(" Upsert")
         end
 
         # Looks up the model class from the SQL's table name. Returns nil
@@ -200,9 +336,26 @@ module EzLogsAgent
           table = extract_table_name(sql)
           return nil if table.nil?
 
-          ::ActiveRecord::Base.descendants.find do |klass|
+          # Try the descendants list first — cheap and works in environments
+          # where models are already eager-loaded (production, Sidekiq workers).
+          loaded = ::ActiveRecord::Base.descendants.find do |klass|
             klass.respond_to?(:table_name) && klass.table_name == table && !klass.abstract_class?
           end
+          return loaded if loaded
+
+          # Fallback for development mode and any lazy-autoload path: derive
+          # the model class name from the table name via Rails' inflector
+          # and try to safe_constantize it. ActiveRecord's reflection class
+          # caches it on first call, so subsequent bulk ops on the same
+          # table hit the descendants path above.
+          constant_name = table.to_s.classify
+          klass = constant_name.safe_constantize
+          return klass if klass.is_a?(Class) &&
+                          klass < ::ActiveRecord::Base &&
+                          klass.respond_to?(:table_name) &&
+                          klass.table_name == table
+
+          nil
         rescue StandardError
           nil
         end
@@ -310,11 +463,12 @@ module EzLogsAgent
         end
 
         # Builds the sentinel resource entry. row_count may be nil (Rails
-        # < 7 didn't ship it; some adapters still don't) — fall back to
-        # "bulk" so the entry is non-nil and the server-side
-        # ResourceAggregationStage doesn't drop it.
+        # < 7 didn't ship it; some adapters still don't), and 0 is also
+        # not informative (PG's update_all returns 0 in some paths) —
+        # fall back to "many" so the display reads naturally and the
+        # server-side ResourceAggregationStage doesn't drop it.
         def build_resource_ids(model_class, row_count)
-          count_str = row_count.is_a?(Integer) ? row_count.to_s : "unknown"
+          count_str = (row_count.is_a?(Integer) && row_count > 0) ? row_count.to_s : "many"
           [{ resource_type: model_class.name, resource_id: "bulk:#{count_str}" }]
         end
 
@@ -327,12 +481,68 @@ module EzLogsAgent
         end
 
         # Uses DatabaseCapturer's existing all_excluded_tables list — one
-        # config knob, both capturers obey it.
+        # config knob, both capturers obey it. The list is memoized at
+        # install time (`@excluded_tables`) so we don't pay a Hash
+        # method dispatch on every captured event. Customers who change
+        # config at runtime need to call uninstall! + install — the same
+        # constraint that already applies to `capture_database`.
         def table_excluded?(model_class)
           return false unless model_class.respond_to?(:table_name)
 
-          ::EzLogsAgent.configuration.all_excluded_tables.include?(model_class.table_name)
+          @excluded_tables.include?(model_class.table_name)
         rescue StandardError
+          false
+        end
+
+        # Detects Rails-generated update_all SQL that we can't render
+        # meaningfully OR that is pure framework noise. We are deliberately
+        # narrow here — anything that COULD be a real change a customer
+        # cares about (even SET col = NULL on N rows) we keep.
+        #
+        # Filtered shapes:
+        #
+        #   1. Empty SET hash — the parser couldn't extract any column →
+        #      value pairs (e.g. unquoted column names in raw SQL). The
+        #      captured event would render with no "Set X to Y" detail
+        #      and no humanized filter, just "Updated 26 things" with an
+        #      empty Operation block. That's misleading.
+        #
+        #   2. Counter cache / increment! / decrement! — any SET value is
+        #      a `COALESCE(<col>, 0) + N` expression. Rails uses this
+        #      shape for `increment_counter`, `increment!`,
+        #      `update_counters`. The semantics are "bump a number by N",
+        #      which is plumbing-grade noise: high volume (per-request
+        #      counter bumps fire dozens of times per minute on a busy
+        #      tenant) and zero business meaning to a non-technical
+        #      reader. On the EZLogs server alone these would dominate
+        #      the timeline.
+        #
+        # SET <fk> = NULL on N rows IS captured — even though Rails sometimes
+        # generates it implicitly as cleanup before a destroy, it's also
+        # the shape of a real customer-issued nullification (soft-orphaning,
+        # disassociating tags from an item, etc.), and from the SQL alone
+        # we can't tell the two apart. Showing it honestly is the right call:
+        # the reader sees that N rows had their column X set to NULL.
+        #
+        # @return [Boolean]
+        def framework_rewrite?(operation, parse_result)
+          return false unless operation == :update_all
+          return false unless parse_result.is_a?(Hash)
+
+          set = parse_result[:set]
+
+          # Empty SET hash: parser bailed. Drop — would render as an
+          # empty Operation block.
+          return true if set.is_a?(Hash) && set.empty? && !parse_result[:unparseable]
+
+          return false unless set.is_a?(Hash) && set.any?
+
+          # Counter-cache / increment! — any value contains COALESCE().
+          # Distinct from a deliberate UPDATE because the SET expression
+          # references the column on its own RHS, which no business
+          # update_all ever does.
+          return true if set.values.any? { |v| v.to_s.include?("COALESCE(") }
+
           false
         end
 

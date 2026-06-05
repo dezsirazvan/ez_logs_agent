@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] — 2026-06-05
+
+### Fixed
+- **Bulk-op row counts on Postgres.** The PG adapter does not populate
+  `payload[:row_count]` for plain `DELETE`/`UPDATE` notifications, so
+  the first 0.2.0 builds shipped `row_count: 0` for the cases that
+  matter most. `BulkDatabaseCapturer` now prepends a tiny shim onto
+  `ActiveRecord::Relation#delete_all` / `#update_all` that stashes the
+  returned row count and back-fills it onto the just-pushed event via
+  `Buffer.peek_last`. No change to the wire shape — `row_count` now
+  carries the real number.
+- **Model resolution in Rails dev mode.** `ActiveRecord::Base.descendants`
+  only sees eager-loaded models. The resolver now falls through to
+  `safe_constantize` of the classified table name and verifies the
+  reconstructed class actually owns that table, so bulk ops on
+  lazy-autoloaded models in dev / test no longer silently drop.
+- **Rails Query Log Tags noise in `where_template`.** The parser now
+  strips `/*application='X',action='Y'*/` comments before extracting
+  the WHERE clause, so the humanized filter line on the server reads
+  cleanly instead of leaking the framework's instrumentation tags.
+
+### Changed
+- **Framework-rewrite filter narrowed.** The 0.2.0 filter that swallowed
+  Rails-generated `SET col = NULL` writes was too aggressive — it also
+  hid deliberate "null this column out" operations the customer wrote.
+  The filter now only drops `COALESCE`-shaped counter bumps and
+  empty-`SET` shells; honest `SET col = NULL` writes are captured and
+  render as "Cleared col" on the timeline.
+- **Hot-path performance.** `capture_jobs`, `capture_database`, the
+  excluded-tables / excluded-job-classes / display-name maps, and the
+  user-extended sensitive-key patterns are now memoized at install
+  time across `ActiveJobCapturer`, `DatabaseCapturer`,
+  `BulkDatabaseCapturer`, and `SensitivePatterns`. The
+  `sql.active_record` subscriber is also tuned: 5-arity block to avoid
+  splat allocation, cheap `end_with?` name-prefilter ahead of any
+  parsing, and an early bail before `safe_constantize`. Bulk capture
+  overhead measured below the noise floor on a 10 ms reference query.
+
 ## [0.2.0] — 2026-06-05
 
 ### Added

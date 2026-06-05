@@ -48,17 +48,35 @@ module EzLogsAgent
       key_lower = key.to_s.downcase
       return true if PATTERNS.any? { |pattern| key_lower.include?(pattern) }
 
-      # Direct configuration access — any raise here propagates to the
-      # rescue below and we fail-closed. Wrapping the access in its own
-      # rescue would silently fall back to "no extra patterns" on a
-      # config bug and the outer rescue would never fire, which means
-      # the broken-config path becomes "leak", not "mask".
-      user_patterns = EzLogsAgent.configuration.excluded_graphql_variable_keys || []
-      user_patterns.any? { |pattern| key_lower.include?(pattern.to_s.downcase) }
+      user_patterns = user_patterns_cache
+      user_patterns.any? { |pattern| key_lower.include?(pattern) }
     rescue StandardError
       # Defensive: if configuration access raises, treat as sensitive.
       # Better to over-mask than to leak.
       true
     end
+
+    # Memoized lookup of user-configured patterns, already lowercased.
+    # Called per HTTP param, per DB attribute, per job arg key. Without
+    # the cache it would dispatch into EzLogsAgent.configuration on
+    # every check.
+    #
+    # The cache is keyed by `object_id` of the configured array, so
+    # `EzLogsAgent.configure { |c| c.excluded_graphql_variable_keys = [...] }`
+    # invalidates it naturally (assigning a new array changes its id).
+    # No explicit invalidation needed.
+    def user_patterns_cache
+      configured = EzLogsAgent.configuration.excluded_graphql_variable_keys
+      return @cached_user_patterns if configured.nil? && @cached_source_id.nil?
+
+      source_id = configured&.object_id
+      if source_id != @cached_source_id
+        @cached_user_patterns =
+          (configured || []).map { |p| p.to_s.downcase }.freeze
+        @cached_source_id = source_id
+      end
+      @cached_user_patterns
+    end
+    private_class_method :user_patterns_cache
   end
 end

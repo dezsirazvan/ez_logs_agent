@@ -63,7 +63,7 @@ module EzLogsAgent
     def parse(sql:, type_casted_binds:)
       return { unparseable: true } if sql.nil? || sql.empty?
 
-      sql_stripped = sql.strip
+      sql_stripped = strip_query_log_tags(sql.strip)
 
       case sql_stripped
       when /\ADELETE FROM /i
@@ -82,6 +82,16 @@ module EzLogsAgent
       # defending here means the rest of the capturer sees a uniform
       # return shape.
       { unparseable: true }
+    end
+
+    # Strip Rails 7+ Query Log Tags (`/*application='X',action='Y'*/`)
+    # AND any other trailing SQL comments. They land at the end of every
+    # statement when `config.active_record.query_log_tags_enabled = true`
+    # and are pure noise on the timeline — they leak the host app's name
+    # and controller into the user-visible filter line. Removing them at
+    # parse time means we never ship them on the wire.
+    def strip_query_log_tags(sql)
+      sql.gsub(%r{/\*.*?\*/}m, "").rstrip
     end
 
     # Returns the symbolic operation name we expect downstream. Detected

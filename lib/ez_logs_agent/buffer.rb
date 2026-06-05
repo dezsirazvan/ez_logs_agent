@@ -59,6 +59,20 @@ module EzLogsAgent
         # Best effort, ignore failures
       end
 
+      # Returns the most recently pushed event WITHOUT removing it.
+      # Used by BulkDatabaseCapturer to backfill the affected-row count
+      # after the relation method's return value is known (Rails'
+      # payload[:row_count] is unreliable for plain DELETE on PG).
+      # Mutating the returned hash in place is intentional and safe —
+      # the event hasn't been flushed yet.
+      # @return [Hash, nil] The last event, or nil if empty.
+      def peek_last
+        @monitor.synchronize { @queue.last }
+      rescue => error
+        log_error("[Buffer] peek_last failed: #{error.message}")
+        nil
+      end
+
       private
 
       def max_size

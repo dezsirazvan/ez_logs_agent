@@ -51,6 +51,25 @@ module EzLogsAgent
         def install
           return unless defined?(ActiveJob)
 
+          # Memoize config values that the per-job hot path reads on
+          # every execute. Without this, capture_execution dispatches
+          # into EzLogsAgent.configuration twice per job (once for
+          # capture_jobs, once for all_excluded_job_classes). On
+          # job-heavy apps that's measurable. Runtime mutations need
+          # uninstall! + install.
+          @capture_enabled =
+            begin
+              EzLogsAgent.configuration.capture_jobs
+            rescue StandardError
+              false
+            end
+          @excluded_job_classes =
+            begin
+              EzLogsAgent.configuration.all_excluded_job_classes.dup.freeze
+            rescue StandardError
+              [].freeze
+            end
+
           install_serialization_hooks unless @serialization_installed
 
           ActiveJob::Base.before_enqueue do |job|
@@ -101,7 +120,11 @@ module EzLogsAgent
         # @param block [Proc] The job execution block
         # @return [Object] The result of the job execution
         def capture_execution(job, block)
-          return block.call unless EzLogsAgent.configuration.capture_jobs
+          # Memoized at install time for hot-path perf. If we haven't
+          # installed yet (specs that test capture_execution directly),
+          # fall back to a live config read so the behavior matches.
+          enabled = defined?(@capture_enabled) ? @capture_enabled : EzLogsAgent.configuration.capture_jobs
+          return block.call unless enabled
 
           if sidekiq_adapter?(job)
             EzLogsAgent::Logger.debug("[ActiveJobCapturer] Skipping capture (Sidekiq adapter)")
@@ -196,8 +219,10 @@ module EzLogsAgent
         # @param job [ActiveJob::Base] The job instance
         # @return [Boolean] true if excluded, false otherwise
         def excluded_job_class?(job)
-          job_class_name = job.class.name
-          EzLogsAgent.configuration.all_excluded_job_classes.include?(job_class_name)
+          # Memoized at install time for perf. Fall back to a live read
+          # for specs that don't call install (see capture_execution).
+          excluded = defined?(@excluded_job_classes) ? @excluded_job_classes : EzLogsAgent.configuration.all_excluded_job_classes
+          excluded.include?(job.class.name)
         rescue StandardError
           false
         end

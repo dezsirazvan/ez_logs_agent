@@ -78,6 +78,33 @@ module EzLogsAgent
           return unless defined?(ActiveRecord::Base)
           return if @installed
 
+          # Memoize config values that the per-row hot path reads on
+          # every callback. Without this, each captured create / update
+          # / destroy pays a method dispatch into the configuration
+          # object (`EzLogsAgent.configuration.capture_database`) plus
+          # an `all_excluded_tables.include?` Hash dispatch. On a request
+          # that touches dozens of rows the overhead is real.
+          # Runtime mutations require uninstall! + install to take effect
+          # (acceptable — nobody flips capture_database at runtime).
+          @capture_enabled =
+            begin
+              EzLogsAgent.configuration.capture_database
+            rescue StandardError
+              false
+            end
+          @excluded_tables =
+            begin
+              EzLogsAgent.configuration.all_excluded_tables.dup.freeze
+            rescue StandardError
+              [].freeze
+            end
+          @display_name_for =
+            begin
+              (EzLogsAgent.configuration.display_name_for || {}).dup.freeze
+            rescue StandardError
+              {}.freeze
+            end
+
           # Only register callbacks once per Ruby process
           unless @callbacks_registered
             ActiveRecord::Base.class_eval do
@@ -137,24 +164,24 @@ module EzLogsAgent
 
         private
 
-        # Checks if database capture is enabled
+        # Checks if database capture is enabled. Reads the memoized
+        # value set at install time (no config-object dispatch on the
+        # hot path).
         #
         # @return [Boolean]
         def capture_enabled?
-          EzLogsAgent.configuration.capture_database
-        rescue StandardError
-          false
+          @capture_enabled
         end
 
-        # Checks if the model's table is in the excluded_tables list
-        # Uses all_excluded_tables which combines defaults with user-configured
+        # Checks if the model's table is in the excluded_tables list.
+        # Reads the memoized list set at install time.
         #
         # @param model [ActiveRecord::Base] The model instance
         # @return [Boolean]
         def table_excluded?(model)
           return false unless model.class.respond_to?(:table_name)
 
-          EzLogsAgent.configuration.all_excluded_tables.include?(model.class.table_name)
+          @excluded_tables.include?(model.class.table_name)
         rescue StandardError
           false
         end
@@ -219,9 +246,8 @@ module EzLogsAgent
         # @param model [ActiveRecord::Base] The model instance
         # @return [String, nil] The display name, or nil if no meaningful name found
         def resolve_display_name(model)
-          # Check for configured custom field
-          display_name_config = EzLogsAgent.configuration.display_name_for || {}
-          custom_field = display_name_config[model.class.name]
+          # Check for configured custom field (memoized list, see install).
+          custom_field = @display_name_for[model.class.name]
 
           if custom_field && model.respond_to?(custom_field)
             value = model.public_send(custom_field)
