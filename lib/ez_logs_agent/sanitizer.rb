@@ -96,6 +96,12 @@ module EzLogsAgent
       private
 
       def sanitize_nested_object(hash, depth)
+        # ActiveJob serializes record refs as `{"_aj_globalid" => "gid://..."}`.
+        # Preserve these even past the depth limit so a record reference
+        # survives the [Object] collapse and the server can display WHICH
+        # record the job ran on. Display formatting (gid → "User #42") is
+        # the server's job; the agent's job is to keep the data on the wire.
+        return hash if global_id_hash?(hash)
         return "[Object]" if depth >= MAX_NESTING_DEPTH
         return {} if hash.empty?
 
@@ -144,6 +150,16 @@ module EzLogsAgent
           value.is_a?(Numeric) ||
           value.is_a?(TrueClass) ||
           value.is_a?(FalseClass)
+      end
+
+      # True iff `hash` is the exact one-key shape ActiveJob uses to serialize
+      # an ActiveRecord (or any GlobalID::Identification) argument:
+      # `{"_aj_globalid" => "gid://..."}`. Used to exempt these hashes from
+      # the depth-limit collapse so the wire still carries the record ref.
+      def global_id_hash?(hash)
+        return false unless hash.is_a?(Hash) && hash.size == 1
+        gid = hash["_aj_globalid"] || hash[:_aj_globalid]
+        gid.is_a?(String) && gid.start_with?("gid://")
       end
     end
   end
