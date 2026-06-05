@@ -38,5 +38,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rack", "~> 2.2"
   spec.add_development_dependency "sidekiq", "~> 7.0"
   spec.add_development_dependency "rails", "~> 7.0"
-  spec.add_development_dependency "sqlite3", "~> 1.6"
+  spec.add_development_dependency "sqlite3", "~> 2.9"
 end
