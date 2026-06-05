@@ -218,17 +218,29 @@ Sidekiq and ActiveJob executions:
 
 ActiveRecord create, update, and destroy operations:
 
-**What's captured:**
+**What's captured (per-row, via `after_create` / `after_update` / `after_destroy`):**
 - Model class name, record ID, operation type (create/update/destroy)
 - For creates: initial attribute values
 - For updates: one meaningful attribute change (e.g., `status: pending → shipped`)
 - For destroys: final attribute values before deletion
 - Correlation ID (automatically inherited from the current request or job)
 
+**What's captured (bulk, via `ActiveSupport::Notifications` on `sql.active_record`):**
+- The four ActiveRecord operations that bypass per-row callbacks:
+  `delete_all`, `update_all`, `insert_all`, `upsert_all`.
+- For each: model class, row count, the filter rule (WHERE columns +
+  sanitized bind values), and operation-specific detail (SET hash for
+  `update_all`, column names for `insert_all` / `upsert_all` — values
+  are NOT shipped for bulk inserts).
+- `dependent: :delete_all` cascades during a parent destroy.
+
 **What's NOT captured:**
 - SELECT queries (read operations don't change data)
 - Schema migrations (Rails internal operations)
-- Bulk operations (e.g., `update_all`, `delete_all`)
+- Raw `connection.execute(sql)` calls (no recognizable model class)
+- Individual row IDs affected by bulk operations (only the filter rule
+  and row count — pulling the IDs would require modifying the
+  customer's SQL, which violates the read-only principle).
 
 **Automatic exclusions (no configuration needed):**
 - `sessions` — Session store updates
@@ -777,18 +789,23 @@ Common validation errors:
 
 3. **Look for database capture registration in logs:**
    ```
-   [Railtie] Database capture installed
+   [Railtie] Database capture installed (per-row + bulk)
    ```
 
 4. **Verify models aren't excluded:**
    Check `config.excluded_tables` to ensure your tables aren't being filtered out.
 
-5. **Remember: Only create/update/destroy are captured:**
-   - ✅ `User.create(...)` — Captured
-   - ✅ `user.update(...)` — Captured
-   - ✅ `user.destroy` — Captured
+5. **What is and isn't captured:**
+   - ✅ `User.create(...)` — Captured (per-row callback)
+   - ✅ `user.update(...)` — Captured (per-row callback)
+   - ✅ `user.destroy` — Captured (per-row callback)
+   - ✅ `User.update_all(...)` — Captured as a `bulk_database` event
+     (filter + SET clause + row count; no per-row IDs)
+   - ✅ `User.where(...).delete_all` — Captured as a `bulk_database` event
+   - ✅ `User.insert_all(...)` / `upsert_all(...)` — Captured (columns + count)
    - ❌ `User.find(...)` — NOT captured (read-only)
-   - ❌ `User.update_all(...)` — NOT captured (bulk operation)
+   - ❌ `User.connection.execute("DELETE FROM ...")` — NOT captured
+     (raw SQL bypasses the typed AR API we hook)
 
 ---
 

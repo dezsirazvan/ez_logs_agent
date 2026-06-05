@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] — 2026-06-05
+
+### Added
+- **Bulk database operations are now captured.** Adds a fourth event
+  `source_type` — `bulk_database` — for the four ActiveRecord operations
+  that bypass per-row callbacks: `delete_all`, `update_all`, `insert_all`,
+  `upsert_all`. Implemented via a narrowly-filtered
+  `ActiveSupport::Notifications.subscribe("sql.active_record")` subscription
+  (`Capturers::BulkDatabaseCapturer`) — not a replacement for the existing
+  callback-based DatabaseCapturer; the two run side by side under the
+  same `capture_database` config flag.
+
+  The new wire shape carries `model_class`, `operation`, `row_count`,
+  `where_template` + sanitized `where_binds`, plus an operation-specific
+  field (`set` for update_all, `columns` for insert_all/upsert_all).
+  Insert/upsert ship column NAMES only — no values, per the product
+  decision that bulk-row PII shouldn't ride the wire.
+
+  Cascade case (`dependent: :delete_all` on a parent destroy) is
+  captured automatically, since it produces the same SQL shape — the
+  reader sees the parent destroy AND the cascade as sibling rows on the
+  timeline.
+
+  Resource attribution uses a `resource_id: "bulk:<row_count>"` sentinel,
+  since individual row IDs are not knowable from the SQL without
+  changing the customer's operation (which would violate the read-only
+  principle).
+
+### Changed
+- `Sanitizer::SENSITIVE_PATTERNS` and the previous in-class
+  `DatabaseCapturer::SENSITIVE_PATTERNS` (which had drifted) are now a
+  single source of truth: `EzLogsAgent::SensitivePatterns::PATTERNS`.
+  Both capturers + the new BulkDatabaseCapturer consult the same list.
+  The merged list is the UNION of the previous two — no patterns
+  removed; `passwd`, `pwd`, `cvv`, `cvc`, `pem`, `cipher`, `nonce`,
+  `salt`, `digest`, `signature`, `hmac` all continue to be masked.
+- `encrypts :foo` introspection (Rails 7+ `model.class.encrypted_attributes`)
+  is now exposed as the standalone `EzLogsAgent::EncryptedAttributes`
+  module, so both the per-row and bulk capturers consult it via the
+  same path. Behavior unchanged for per-row.
+
+### Limits (documented)
+- Raw `connection.execute(sql)` calls are not captured (no
+  notifications fire under `sql.active_record` with a recognizable
+  shape). Use the typed bulk methods to get visibility.
+- Specific row IDs affected by a bulk op are not captured — only the
+  filter rule (WHERE columns + values) and row count. For per-row
+  detail, use `find_each(&:destroy)` style which fires per-row
+  callbacks.
+
 ## [0.1.10] — 2026-06-05
 
 ### Fixed

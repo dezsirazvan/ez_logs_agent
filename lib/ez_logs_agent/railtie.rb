@@ -218,10 +218,13 @@ module EzLogsAgent
       EzLogsAgent::Logger.error("[Railtie] Failed to install ActiveJob capturer: #{e.class} - #{e.message}")
     end
 
-    # Install Database capturer
+    # Install Database capturers (per-row + bulk).
     #
-    # Database capturer installs ActiveRecord lifecycle callbacks
-    # (after_create, after_update, after_destroy) for all models.
+    # Two capturers, one switch (`capture_database`):
+    # - DatabaseCapturer: per-row CRUD via after_create / _update / _destroy.
+    # - BulkDatabaseCapturer: bulk SQL via ActiveSupport::Notifications
+    #   ("sql.active_record"), narrowly filtered to delete_all / update_all /
+    #   insert_all / upsert_all. Catches what callbacks can't see.
     #
     # @return [void]
     def self.install_database_capturer
@@ -240,8 +243,9 @@ module EzLogsAgent
       return if @database_capturer_installed
 
       EzLogsAgent::Capturers::DatabaseCapturer.install
+      EzLogsAgent::Capturers::BulkDatabaseCapturer.install
       @database_capturer_installed = true
-      EzLogsAgent::Logger.debug("[Railtie] Database capture installed")
+      EzLogsAgent::Logger.debug("[Railtie] Database capture installed (per-row + bulk)")
     rescue StandardError => e
       EzLogsAgent::Logger.error("[Railtie] Failed to install database capturer: #{e.class} - #{e.message}")
     end

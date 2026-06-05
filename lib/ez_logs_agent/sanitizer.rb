@@ -21,18 +21,11 @@ module EzLogsAgent
   # The module is pure (no I/O, no state), so it's safe to call from
   # any thread.
   module Sanitizer
-    # Default sensitive-key patterns. Matched case-insensitively as
-    # SUBSTRINGS of the key, so `customer_password` matches `password`.
-    SENSITIVE_PATTERNS = %w[
-      password passwd pwd
-      token access_token refresh_token api_token auth_token
-      secret api_secret client_secret
-      api_key apikey private_key privatekey secret_key secretkey
-      credential auth authorization
-      encrypted encrypted_data
-      ssn social_security
-      credit_card card_number cvv cvc
-    ].freeze
+    # Sensitive-key pattern list. Delegates to SensitivePatterns (single
+    # source of truth shared with DatabaseCapturer / BulkDatabaseCapturer).
+    # Kept as a constant alias for backwards compatibility — code that
+    # used `Sanitizer::SENSITIVE_PATTERNS` continues to work.
+    SENSITIVE_PATTERNS = EzLogsAgent::SensitivePatterns::PATTERNS
 
     # Hard ceiling for nested object recursion. Deeper structures
     # collapse to the literal string "[Object]".
@@ -79,18 +72,13 @@ module EzLogsAgent
 
       # Check whether a key matches a sensitive pattern. Public so the
       # HTTP middleware can short-circuit early on identical keys.
+      # Delegates to SensitivePatterns (single source of truth — also
+      # consulted by DatabaseCapturer and BulkDatabaseCapturer).
       #
       # @param key [String, Symbol]
       # @return [Boolean]
       def sensitive_key?(key)
-        key_lower = key.to_s.downcase
-        return true if SENSITIVE_PATTERNS.any? { |pattern| key_lower.include?(pattern) }
-
-        user_patterns = EzLogsAgent.configuration.excluded_graphql_variable_keys || []
-        user_patterns.any? { |pattern| key_lower.include?(pattern.to_s.downcase) }
-      rescue
-        # Defensive: when in doubt, treat as sensitive.
-        true
+        EzLogsAgent::SensitivePatterns.match?(key)
       end
 
       private

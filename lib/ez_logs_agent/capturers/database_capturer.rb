@@ -60,37 +60,9 @@ module EzLogsAgent
       # Previously we filtered them out, but this loses important context.
       # FOREIGN_KEY_PATTERN = /_id\z/  # Removed January 2026
 
-      # Patterns for sensitive data to ignore.
-      #
-      # The first source of truth is `record.class.encrypted_attributes`
-      # (Rails 7+ `encrypts :foo` declaration) — see encrypted_attribute?.
-      # If the host app encrypted it, we never capture it.
-      #
-      # This list is the secondary defense: column names that frequently
-      # carry sensitive material even when the host app didn't declare
-      # `encrypts` (legacy code, manual hashing, externally-generated
-      # material). Matching is substring + case-insensitive.
-      SENSITIVE_PATTERNS = %w[
-        password
-        token
-        secret
-        api_key
-        credit_card
-        ssn
-        social_security
-        encrypted
-        private_key
-        public_key
-        signing_key
-        pem
-        cipher
-        nonce
-        salt
-        digest
-        signature
-        hmac
-      ].freeze
-
+      # Sensitive-attribute name pattern denylist (secondary defense after
+      # `encrypts :foo` introspection) lives in EzLogsAgent::SensitivePatterns —
+      # see sensitive_attribute? below.
 
       @installed = false
       @callbacks_registered = false
@@ -386,35 +358,25 @@ module EzLogsAgent
         end
 
         # Checks whether the host app declared `encrypts :<attribute>` on
-        # this model's class. Available since Rails 7.0 via
-        # ActiveRecord::Encryption::EncryptableRecord#encrypted_attributes.
-        #
-        # Safe across host Rails versions: returns false if the API isn't
-        # present (older Rails, non-AR records).
+        # this model's class. Delegates to EncryptedAttributes (single
+        # source of truth shared with BulkDatabaseCapturer, which only has
+        # the class — no instance — for bulk operations).
         #
         # @param attribute [String] The attribute name (already to_s'd)
         # @param model [ActiveRecord::Base] The model instance
         # @return [Boolean]
         def encrypted_attribute?(attribute, model)
-          klass = model.class
-          return false unless klass.respond_to?(:encrypted_attributes)
-
-          encrypted = klass.encrypted_attributes
-          return false if encrypted.nil? || encrypted.empty?
-
-          encrypted.map(&:to_s).include?(attribute)
-        rescue StandardError
-          false
+          EzLogsAgent::EncryptedAttributes.attribute?(model.class, attribute)
         end
 
         # Checks if attribute name contains sensitive patterns.
-        # Secondary check — see SENSITIVE_PATTERNS comment.
+        # Delegates to SensitivePatterns (single source of truth shared
+        # with Sanitizer and BulkDatabaseCapturer).
         #
         # @param attribute [String] The attribute name
         # @return [Boolean]
         def sensitive_attribute?(attribute)
-          attr_lower = attribute.downcase
-          SENSITIVE_PATTERNS.any? { |pattern| attr_lower.include?(pattern) }
+          EzLogsAgent::SensitivePatterns.match?(attribute)
         end
 
         # Checks if both values are scalar types

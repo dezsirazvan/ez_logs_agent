@@ -24,7 +24,10 @@ module EzLogsAgent
     SENSITIVE_KEYS = %w[password token secret api_key credit_card].freeze
 
     # Valid source types
-    VALID_SOURCE_TYPES = %w[http_request background_job database_callback].freeze
+    # bulk_database covers AR bulk ops that bypass per-row callbacks
+    # (delete_all, update_all, insert_all, upsert_all) captured via
+    # ActiveSupport::Notifications. See Capturers::BulkDatabaseCapturer.
+    VALID_SOURCE_TYPES = %w[http_request background_job database_callback bulk_database].freeze
 
     # Valid outcome values
     VALID_OUTCOMES = %w[success failure].freeze
