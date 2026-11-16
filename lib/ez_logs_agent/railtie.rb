@@ -32,6 +32,7 @@ module EzLogsAgent
 
       # Reset registration state (for testing)
       def reset_registration_state!
+        @startup_announced = false
         @sidekiq_client_registered = false
         @sidekiq_server_registered = false
         @activejob_installed = false
@@ -78,6 +79,7 @@ module EzLogsAgent
     config.after_initialize do
       # Validate configuration before doing anything
       validation_result = validate_configuration
+      announce_startup(validation_result)
       next unless validation_result
 
       # Register Sidekiq middleware
@@ -267,6 +269,8 @@ module EzLogsAgent
       # ActiveSupport::ForkTracker (Rails 6.1+) is the most reliable way
       if defined?(ActiveSupport::ForkTracker)
         ActiveSupport::ForkTracker.after_fork do
+          # The parent still owns (and sends) what it buffered before the fork
+          EzLogsAgent::Buffer.clear
           start_flush_scheduler
         end
         EzLogsAgent::Logger.debug("[Railtie] Registered ActiveSupport::ForkTracker hook for FlushScheduler")
@@ -347,6 +351,41 @@ module EzLogsAgent
       end
     rescue StandardError => e
       EzLogsAgent::Logger.error("[Railtie] Failed to log configuration summary: #{e.class} - #{e.message}")
+    end
+
+    # One line per process at the default log level, so "is it on?" is
+    # answerable from the logs: where events go and which key, shown the
+    # way the dashboard's Settings → API Keys shows it (`ezl_` + first 8
+    # characters). Other token shapes get no hint. Silent in the test env.
+    #
+    # @param capturing [Boolean] result of validate_configuration
+    # @return [void]
+    def self.announce_startup(capturing)
+      return if @startup_announced
+      @startup_announced = true
+      return if Rails.env.test?
+
+      config = EzLogsAgent.configuration
+      if capturing
+        uri = URI.parse(config.server_url.to_s)
+        host = uri.port == uri.default_port ? uri.host : "#{uri.host}:#{uri.port}"
+        token = config.project_token.to_s
+        project = token.start_with?("ezl_") && token.length >= 24 ? " (key #{token[0, 12]}…)" : ""
+        EzLogsAgent::Logger.notice("capturing → #{host}#{project}")
+      else
+        missing = [
+          blank?(config.server_url) && "server_url",
+          blank?(config.project_token) && "project_token"
+        ].select { |m| m }
+        reason = missing.any? ? "#{missing.join(' and ')} missing" : "invalid configuration (see errors above)"
+        EzLogsAgent::Logger.warn("not capturing: #{reason}")
+      end
+    rescue StandardError => e
+      EzLogsAgent::Logger.error("[Railtie] Failed to log startup line: #{e.class} - #{e.message}")
+    end
+
+    def self.blank?(value)
+      value.nil? || value.to_s.strip.empty?
     end
 
     # Load rake tasks

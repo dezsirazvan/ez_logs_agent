@@ -16,6 +16,8 @@ EzLogsAgent.configure do |config|
   config.server_url = ENV.fetch("EZLOGS_SERVER_URL", "https://app.ezlogs.io")
 
   # API key for your tenant. Get one at https://app.ezlogs.io/settings/api-keys.
+  # On boot the log shows "[EzLogsAgent] capturing → <host> (key ezl_<first 8>…)",
+  # or "[EzLogsAgent] not capturing: project_token missing" when this is unset.
   config.project_token = ENV["EZLOGS_API_KEY"]
 
   # =============================================================================

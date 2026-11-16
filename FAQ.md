@@ -405,7 +405,7 @@ This verifies:
 
 **Check Rails logs:**
 ```
-[EzLogsAgent] Agent initialized successfully
+[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
 [EzLogsAgent] Sending batch of 5 events...
 [EzLogsAgent] Batch sent successfully (HTTP 200)
 ```

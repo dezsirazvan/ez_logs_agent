@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "timeout"
+
 module EzLogsAgent
   # FlushScheduler orchestrates periodic flushing of buffered events to the server.
   #
@@ -14,6 +16,10 @@ module EzLogsAgent
   # - Does NOT manage Rails lifecycle (Railtie handles that)
   # - Does NOT mutate or inspect events
   class FlushScheduler
+    # Exit budget: wait this long for the loop thread, then cap the final send
+    STOP_JOIN_SECONDS = 2
+    FINAL_FLUSH_SECONDS = 3
+
     class << self
       # Start the background flush thread
       # Idempotent: safe to call multiple times
@@ -28,14 +34,26 @@ module EzLogsAgent
         Logger.error("[FlushScheduler] Failed to start: #{error.class} - #{error.message}")
       end
 
-      # Stop the background flush thread
+      # Stop the background flush thread, then send what is still buffered
       # Blocks until thread exits
       # Idempotent: safe to call multiple times
       def stop
-        return unless running?
+        return unless @thread
 
         @stop_requested = true
-        @thread.join if @thread
+        begin
+          @thread.wakeup # cut the interval sleep short so exit isn't delayed
+        rescue ThreadError
+          nil # thread already dead (e.g. the loop crashed): still drain below
+        end
+        @thread.join(STOP_JOIN_SECONDS)
+        @thread = nil
+
+        # Events buffered since the last tick would otherwise be lost at
+        # exit (rails runner, rake, deploy restarts). One attempt, short
+        # HTTP timeouts, and a hard cap (DNS isn't covered by
+        # open_timeout), so a down server can't stall shutdown.
+        Timeout.timeout(FINAL_FLUSH_SECONDS) { Transport.send(Buffer.flush, timeout: 1) }
 
         Logger.debug("[FlushScheduler] Stopped")
       rescue => error

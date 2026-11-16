@@ -547,9 +547,9 @@ config.retry_attempts = 3
 
 **Type:** Symbol
 **Required:** No
-**Default:** `:info`
+**Default:** `:warn`
 
-Agent log verbosity level.
+Agent log verbosity level. The startup line (`capturing → …` / `not capturing: …`) is printed regardless.
 
 **Example:**
 ```ruby
@@ -561,8 +561,8 @@ config.log_level = :info
 | Level | What's Logged |
 |-------|---------------|
 | `:debug` | Everything (capture events, buffer state, send attempts) |
-| `:info` | Initialization, sends, warnings (default) |
-| `:warn` | Warnings and errors only |
+| `:info` | Configuration summary at boot, warnings |
+| `:warn` | Warnings and errors only (default) |
 | `:error` | Errors only |
 
 **Debug output example:**
@@ -574,11 +574,19 @@ config.log_level = :info
 [EzLogsAgent] Batch sent successfully (HTTP 200, 120ms)
 ```
 
-**Info output example (default):**
+**Default output (`:warn`):**
 ```
-[EzLogsAgent] Agent initialized successfully
-[EzLogsAgent] Sending batch of 12 events...
-[EzLogsAgent] Batch sent successfully (HTTP 200)
+[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
+```
+
+**Info output example:**
+```
+[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
+[EzLogsAgent] [Railtie] Configuration:
+[EzLogsAgent] [Railtie]   Server: https://app.ezlogs.io
+[EzLogsAgent] [Railtie]   Capture HTTP: true
+[EzLogsAgent] [Railtie]   Capture Jobs: true
+[EzLogsAgent] [Railtie]   Capture Database: true
 ```
 
 **When to use debug:**
@@ -651,13 +659,12 @@ Configuration is validated when Rails boots. Errors and warnings are logged.
 [Railtie] Agent initialization skipped. Please fix configuration errors.
 ```
 
-### Warning Messages
-
 **Missing project_token:**
 ```
-[Railtie] Configuration warnings:
-  - project_token is not set. Authentication may fail if the server requires it.
-[Railtie] Agent will attempt to initialize without authentication.
+[Railtie] Configuration validation failed:
+  - project_token is required. Set it in config/initializers/ez_logs_agent.rb
+[Railtie] Agent initialization skipped. Please fix configuration errors.
+[EzLogsAgent] not capturing: project_token missing
 ```
 
 ### Validation Rules
@@ -665,7 +672,7 @@ Configuration is validated when Rails boots. Errors and warnings are logged.
 | Setting | Validation |
 |---------|-----------|
 | `server_url` | Must be present, must start with `http://` or `https://` |
-| `project_token` | Warning if missing (not required but recommended) |
+| `project_token` | Must be present (the server rejects events without it) |
 | `buffer_size` | Must be positive integer |
 | `send_interval` | Must be positive integer |
 | `retry_attempts` | Must be non-negative integer |

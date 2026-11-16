@@ -158,14 +158,10 @@ rails server
 
 ### Verify Initialization
 
-Check your Rails logs for the startup message:
+Check your Rails logs for the startup line. It is printed once per process (web, Sidekiq, rake), whatever the agent's `log_level`, and is visible unless Rails' own log level is above `info`. In development, look in `log/development.log`: `rails s` copies the log to the terminal only after boot, so the line is not in the terminal.
 
 ```
-[EzLogsAgent] Agent initialized successfully
-[EzLogsAgent] Server URL: https://app.ezlogs.io
-[EzLogsAgent] ✓ HTTP capture enabled
-[EzLogsAgent] ✓ Sidekiq capture enabled
-[EzLogsAgent] ✓ Database capture enabled
+[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
 ```
 
 If you see this, the agent is running!

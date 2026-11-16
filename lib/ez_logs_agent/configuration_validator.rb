@@ -42,9 +42,9 @@ module EzLogsAgent
         errors << "server_url must be a valid URL (got: #{config.server_url})"
       end
 
-      # Optional but recommended: project_token
+      # Required: the server rejects every event sent without a token
       if config.project_token.nil? || config.project_token.to_s.strip.empty?
-        warnings << "project_token is not set. Authentication may fail if the server requires it."
+        errors << "project_token is required. Set it in config/initializers/ez_logs_agent.rb"
       end
 
       # Validate numeric fields

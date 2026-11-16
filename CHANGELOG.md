@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Startup line.** Each process logs one line, whatever the agent's `log_level` (visible unless Rails' own log level is above `info`), so you can check the install: `[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)`. The key is shown as Settings → API Keys shows it (`ezl_` + first 8 characters); other token shapes get no hint. With config missing it logs `[EzLogsAgent] not capturing: project_token missing`. Silent in the test env. In development it is in `log/development.log`.
+
+### Fixed
+- **Events lost at process exit.** `FlushScheduler.stop` (run from `at_exit`) now sends what is still buffered: one attempt, no retries, 1 s HTTP timeouts and a 3 s hard cap. Before, the last up-to-3 s of events (the `send_interval` default) were dropped whenever a process exited: always for `rails runner` / rake tasks, and on every Puma/Sidekiq restart. It also runs when the flush thread had crashed. Shutdown may take up to ~3–5 s longer when events are pending and the server is slow or unreachable.
+- **Forked children no longer resend the parent's events.** The buffer inherited across `fork` (Puma cluster workers, etc.) is cleared in the child; the parent still sends it.
+
+### Changed
+- **`project_token` is required.** A missing token is now a configuration error and the agent stays off. Before, it was a warning: the agent ran and every batch was rejected with 401. Set the token in `config/initializers/ez_logs_agent.rb`: it is checked once at boot, so a token set later in `after_initialize` or `to_prepare` is not seen.
+
 ## [0.2.1] — 2026-06-05
 
 ### Fixed

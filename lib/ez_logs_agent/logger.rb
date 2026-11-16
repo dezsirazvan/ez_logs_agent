@@ -29,11 +29,17 @@ module EzLogsAgent
         log(:error, message)
       end
 
+      # Logs at :info regardless of the configured log_level. Reserved for
+      # the one startup line that tells users whether capture is on.
+      def notice(message)
+        log(:info, message, force: true)
+      end
+
       private
 
-      def log(level, message)
+      def log(level, message, force: false)
         # Early return if this log level should not be logged
-        return unless should_log?(level)
+        return unless force || should_log?(level)
 
         prefixed_message = "[EzLogsAgent] #{message}"
 

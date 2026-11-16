@@ -154,14 +154,19 @@ rails server
 # Restart your application using your deployment process
 ```
 
-Check your Rails logs for the startup message:
+Check your Rails logs for the startup line. It is printed once per process (web, Sidekiq, rake), whatever the agent's `log_level`, and is visible unless Rails' own log level is above `info`. In development it lands in `log/development.log` (`rails s` copies the log to the terminal only after boot). Silent in the test env.
 
 ```
-[EzLogsAgent] Agent initialized successfully
-[EzLogsAgent] ✓ HTTP capture enabled
-[EzLogsAgent] ✓ Sidekiq capture enabled
-[EzLogsAgent] ✓ Database capture enabled
+[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
 ```
+
+The key is shown the way Settings → API Keys shows it (`ezl_` + first 8 characters), so you can tell which key the app uses. If something is missing, the line says what:
+
+```
+[EzLogsAgent] not capturing: project_token missing
+```
+
+Set `project_token` in `config/initializers/ez_logs_agent.rb`. The agent checks it once at boot, so a token set later (in `after_initialize` or `to_prepare`) is not seen.
 
 ### 5. See Your Activity
 
@@ -659,8 +664,7 @@ rails ez_logs_agent:test_connection
 
 2. **Check Rails logs** for agent messages:
    ```
-   [EzLogsAgent] Agent initialized successfully
-   [EzLogsAgent] ✓ HTTP capture enabled
+   [EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
    [EzLogsAgent] Sending batch of 3 events...
    [EzLogsAgent] Batch sent successfully (HTTP 200)
    ```
@@ -695,7 +699,7 @@ rails ez_logs_agent:test_connection
 
 Common validation errors:
 - `server_url is required` → Set `config.server_url`
-- `project_token is not set` → Set `config.project_token`
+- `project_token is required` → Set `config.project_token`
 - `server_url must start with http:// or https://` → Fix URL format
 
 ---
@@ -879,7 +883,7 @@ config.send_interval = 1
 
 **Normal operation:**
 ```
-[EzLogsAgent] Agent initialized successfully
+[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
 [EzLogsAgent] Sending batch of 12 events...
 [EzLogsAgent] Batch sent successfully (HTTP 200)
 ```
