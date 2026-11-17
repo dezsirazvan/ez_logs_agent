@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.2.2] — 2026-11-17
 
 ### Added
 - **Startup line.** Each process logs one line, whatever the agent's `log_level` (visible unless Rails' own log level is above `info`), so you can check the install: `[EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)`. The key is shown as Settings → API Keys shows it (`ezl_` + first 8 characters); other token shapes get no hint. With config missing it logs `[EzLogsAgent] not capturing: project_token missing`. Silent in the test env. In development it is in `log/development.log`.

@@ -134,12 +134,13 @@ Test your configuration:
 rails ez_logs_agent:test_connection
 ```
 
-**Successful output:**
+**Successful output** (excerpt):
 ```
 ✅ Configuration is valid
 ✅ Connection successful (HTTP 200)
-✅ Test event sent successfully
-✅ All checks passed! EZLogs Agent is configured correctly.
+   Test event accepted by server
+
+✅ All checks passed! EzLogs Agent is configured correctly.
 ```
 
 If the test fails, you'll see exactly what's wrong and how to fix it.
@@ -609,33 +610,36 @@ rails ez_logs_agent:test_connection
 ### Successful Output
 
 ```
-[EzLogsAgent] Testing connection to https://app.ezlogs.io...
-✅ Configuration is valid
-✅ Connection successful (HTTP 200)
-✅ Test event sent successfully
-✅ All checks passed! EZLogs Agent is configured correctly.
+🔍 EzLogs Agent Connection Test
 
-Next steps:
-  1. Restart your Rails application
-  2. Visit your EZLogs dashboard
-  3. Interact with your application to generate events
+Step 1: Validating configuration...
+✅ Configuration is valid
+
+Configuration Summary:
+  Server URL: https://app.ezlogs.io
+  Project Token: ***1a2b
+  Capture HTTP: true
+  Capture Jobs: true
+  Capture Database: true
+
+Step 2: Testing connection to server...
+✅ Connection successful (HTTP 200)
+   Test event accepted by server
+
+✅ All checks passed! EzLogs Agent is configured correctly.
 ```
 
 ### Failed Output
 
-If the test fails, you'll see exactly what's wrong:
+If the test fails, you'll see exactly what's wrong (excerpt, after the same Step 1 and summary):
 
 ```
-[EzLogsAgent] Testing connection to https://app.ezlogs.io...
-❌ Connection failed (HTTP 401 Unauthorized)
-
-Possible causes:
-  - Invalid API key (project_token)
-  - API key has been revoked
-  - Check your project_token in config/initializers/ez_logs_agent.rb
-
-Please fix the error and run this command again.
+Step 2: Testing connection to server...
+❌ Authentication failed (HTTP 401)
+   Check your project_token in config/initializers/ez_logs_agent.rb
 ```
+
+Other failures print one of: `❌ Server endpoint not found (HTTP 404)`, `❌ Could not resolve host: …`, `❌ Connection refused: …`, `❌ Connection timeout: …`, or `❌ Configuration validation failed:` followed by the errors.
 
 ---
 
@@ -662,18 +666,22 @@ rails ez_logs_agent:test_connection
    rails ez_logs_agent:test_connection
    ```
 
-2. **Check Rails logs** for agent messages:
+2. **Check Rails logs** for the startup line and for agent errors, e.g. a rejected key:
    ```
    [EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
-   [EzLogsAgent] Sending batch of 3 events...
-   [EzLogsAgent] Batch sent successfully (HTTP 200)
+   [EzLogsAgent] [Transport] send failed (401)
    ```
 
 3. **Enable debug logging** in `config/initializers/ez_logs_agent.rb`:
    ```ruby
    config.log_level = :debug
    ```
-   Then restart Rails and check logs for detailed capture information.
+   Then restart Rails. A working agent logs, among others:
+   ```
+   [EzLogsAgent] [Railtie] HTTP capture enabled
+   [EzLogsAgent] [Railtie] Agent initialized successfully
+   [EzLogsAgent] [Transport] send succeeded (200)
+   ```
 
 4. **Verify network connectivity:**
    ```bash
@@ -690,23 +698,23 @@ rails ez_logs_agent:test_connection
 
 **Example output:**
 ```
-[Railtie] Configuration validation failed:
-  - server_url is required. Set it in config/initializers/ez_logs_agent.rb
-[Railtie] Agent initialization skipped. Please fix configuration errors.
+[EzLogsAgent] [Railtie] Configuration validation failed:
+[EzLogsAgent] [Railtie]   - server_url is required. Set it in config/initializers/ez_logs_agent.rb
+[EzLogsAgent] [Railtie] Agent initialization skipped. Please fix configuration errors.
 ```
 
 **Solution:** Fix the errors listed in the warning message and restart Rails.
 
 Common validation errors:
-- `server_url is required` → Set `config.server_url`
-- `project_token is required` → Set `config.project_token`
-- `server_url must start with http:// or https://` → Fix URL format
+- `server_url is required. Set it in config/initializers/ez_logs_agent.rb` → Set `config.server_url`
+- `server_url must be a valid URL (got: …)` → Fix the URL format
+- `project_token is required. Set it in config/initializers/ez_logs_agent.rb` → Set `config.project_token`
 
 ---
 
 ### Authentication Errors (HTTP 401)
 
-**Symptoms:** Connection test or agent logs show `HTTP 401 Unauthorized`.
+**Symptoms:** Connection test or agent logs show `HTTP 401`.
 
 **Debug steps:**
 
@@ -751,7 +759,7 @@ Common validation errors:
 
 3. **Look for Sidekiq registration in logs:**
    ```
-   [Railtie] Sidekiq server middleware registered
+   [EzLogsAgent] [Railtie] Sidekiq server middleware registered
    ```
    **Note:** This message only appears in Sidekiq worker processes, not web processes.
 
@@ -793,7 +801,7 @@ Common validation errors:
 
 3. **Look for database capture registration in logs:**
    ```
-   [Railtie] Database capture installed (per-row + bulk)
+   [EzLogsAgent] [Railtie] Database capture installed (per-row + bulk)
    ```
 
 4. **Verify models aren't excluded:**
@@ -843,8 +851,7 @@ config.send_interval = 1
 
 **If correlation is missing when it should be present:**
 1. Enable debug logging: `config.log_level = :debug`
-2. Look for correlation_id in logs: `[EzLogsAgent] Captured HTTP event with correlation_id: req_abc123`
-3. Check that jobs are enqueued within the same request context
+2. Check that jobs are enqueued within the same request context
 
 ---
 
@@ -881,30 +888,32 @@ config.send_interval = 1
 
 ### Understanding Agent Log Messages
 
-**Normal operation:**
+**Normal operation** (the startup line always shows; the other two only at `config.log_level = :debug`):
 ```
 [EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
-[EzLogsAgent] Sending batch of 12 events...
-[EzLogsAgent] Batch sent successfully (HTTP 200)
+[EzLogsAgent] [Railtie] Agent initialized successfully
+[EzLogsAgent] [Transport] send succeeded (200)
 ```
 
-**Warnings (usually safe to ignore):**
+**Warnings:**
 ```
-[EzLogsAgent] Buffer full, dropping oldest events
-→ Your app is generating more events than can be sent
-→ Increase buffer_size or send_interval
+[EzLogsAgent] [Buffer] Buffer full (10000), dropped oldest event
+→ Your app produces events faster than they are sent
+→ Increase buffer_size or lower send_interval
 ```
 
 **Errors (need attention):**
 ```
-[EzLogsAgent] Failed to send events (HTTP 401)
-→ Invalid API key, check config.project_token
+[EzLogsAgent] [Transport] send failed (401)
+→ Invalid or revoked API key, check config.project_token
 
-[EzLogsAgent] Failed to send events (timeout)
-→ Network connectivity issue or server is down
-→ Events will be retried automatically
+[EzLogsAgent] [Transport] send failed: Net::OpenTimeout - execution expired
+→ Network issue or the server is down; the batch is retried (retry_attempts)
 
-[EzLogsAgent] Configuration validation failed
+[EzLogsAgent] [RetrySender] Failed after 4 attempts, dropping 12 events
+→ All retries failed; those events are lost
+
+[EzLogsAgent] [Railtie] Configuration validation failed:
 → Fix configuration errors and restart Rails
 ```
 
@@ -914,7 +923,7 @@ config.send_interval = 1
 
 If you're still stuck after trying the above:
 
-1. **Check GitHub Issues:** [github.com/dezsirazvan/ez_logs](https://github.com/dezsirazvan/ez_logs)
+1. **Check GitHub Issues:** [github.com/dezsirazvan/ez_logs_agent/issues](https://github.com/dezsirazvan/ez_logs_agent/issues)
 2. **Open a new issue** with:
    - Rails version and Ruby version
    - Relevant logs (set `config.log_level = :debug`)
@@ -1032,13 +1041,13 @@ We welcome bug reports and pull requests!
 
 - **786 tests**, all green
 - **Wire-format parity-tested** against the Next.js agent's fixtures (every event shape byte-for-byte identical)
-- **Production-shipping** in multiple Rails apps including the [Bookhouse demo](https://github.com/dezsirazvan/ez_logs/tree/master/demo_apps/bookhouse) — Rails 8 + Sidekiq + Devise, exercises every capture path
+- **Production-shipping** in multiple Rails apps including our Bookhouse demo app (Rails 8 + Sidekiq + Devise, exercises every capture path)
 
 ---
 
 ## Support
 
-- **GitHub Issues:** [Report a bug](https://github.com/dezsirazvan/ez_logs/issues)
+- **GitHub Issues:** [Report a bug](https://github.com/dezsirazvan/ez_logs_agent/issues)
 - **Email:** support@ezlogs.io
 
 ---
