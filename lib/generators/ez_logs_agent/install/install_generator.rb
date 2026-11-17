@@ -61,9 +61,8 @@ module EzLogsAgent
         say "   → Create a new API key for this application\n\n"
 
         say "2. Configure the agent:", :bold
-        say "   → Open config/initializers/ez_logs_agent.rb"
-        say "   → Set your server_url (e.g., https://app.ezlogs.io)"
-        say "   → Set your project_token (the API key from step 1)\n\n"
+        say "   → Set the EZLOGS_API_KEY environment variable to the API key from step 1\n"
+        say "     (config/initializers/ez_logs_agent.rb reads it)\n\n"
 
         if @devise_detected
           say "3. Enable actor tracking (optional but recommended):", :bold

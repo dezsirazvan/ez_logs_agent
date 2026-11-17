@@ -10,15 +10,19 @@ EzLogsAgent.configure do |config|
   # REQUIRED SETTINGS
   # =============================================================================
 
-  # URL of the EzLogs server. Defaults to the EzLogs SaaS endpoint, which is
-  # the same URL for every customer — tenants are identified by API key, not
-  # by URL. Override only if you self-host.
-  config.server_url = ENV.fetch("EZLOGS_SERVER_URL", "https://app.ezlogs.io")
-
   # API key for your tenant. Get one at https://app.ezlogs.io/settings/api-keys.
   # On boot the log shows "[EzLogsAgent] capturing → <host> (key ezl_<first 8>…)",
   # or "[EzLogsAgent] not capturing: project_token missing" when this is unset.
   config.project_token = ENV["EZLOGS_API_KEY"]
+
+  # =============================================================================
+  # OPTIONAL: SERVER URL
+  # =============================================================================
+
+  # URL of the EzLogs server. Defaults to ENV["EZLOGS_SERVER_URL"] if set,
+  # otherwise https://app.ezlogs.io (the same URL for every customer; tenants
+  # are identified by API key, not by URL). Override only if you self-host.
+  # config.server_url = "https://app.ezlogs.io"
 
   # =============================================================================
   # CAPTURE SETTINGS

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] — 2026-11-17
+
+### Changed
+- **`server_url` is optional.** It defaults to `ENV["EZLOGS_SERVER_URL"]` if set, otherwise `https://app.ezlogs.io`, so the API key (`project_token`) is the only required setting. An explicit `config.server_url` still wins, and the URL is still validated. The generated initializer now shows `server_url` as a commented-out override. Existing initializers that set `server_url` keep working unchanged.
+- An empty `EZLOGS_SERVER_URL` counts as unset. Setting `config.server_url = nil` (or `""`) explicitly still turns capture off, as before. If you run your own EZLogs server, set `EZLOGS_SERVER_URL` (or `config.server_url`): without it the agent now sends to app.ezlogs.io.
+
 ## [0.2.2] — 2026-11-17
 
 ### Added

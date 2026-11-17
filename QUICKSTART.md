@@ -74,7 +74,7 @@ rails generate ez_logs_agent:install
 
 ## Step 4: Configure the Agent
 
-The generator already wrote `config/initializers/ez_logs_agent.rb` with sensible defaults — `server_url` points at `https://app.ezlogs.io` (the same URL for every SaaS customer) and `project_token` reads from `ENV["EZLOGS_API_KEY"]`. The only thing you need to set is the API key.
+The generator already wrote `config/initializers/ez_logs_agent.rb` with sensible defaults: `project_token` reads from `ENV["EZLOGS_API_KEY"]`, and `server_url` defaults to `https://app.ezlogs.io` (the same URL for every SaaS customer). The only thing you need to set is the API key.
 
 ```bash
 # .env (development, with the dotenv gem)
@@ -85,7 +85,7 @@ EZLOGS_API_KEY=ezl_your_api_key_here
 # Render / Fly / Railway: set in the env-vars dashboard
 ```
 
-If you self-host the EzLogs server, also set `EZLOGS_SERVER_URL` to your deployment URL — the generated initializer reads it from `ENV["EZLOGS_SERVER_URL"]` automatically.
+If you self-host the EzLogs server, also set `EZLOGS_SERVER_URL` to your deployment URL — the agent reads `ENV["EZLOGS_SERVER_URL"]` automatically.
 
 **Note:** The config setter is called `project_token`, but the value is the API key you copied in Step 3.
 

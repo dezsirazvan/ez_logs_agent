@@ -142,8 +142,14 @@ module EzLogsAgent
       "__*"                               # All introspection fields (__schema, __type, etc.)
     ].freeze
 
+    # SaaS endpoint, the same for every customer (tenants are told apart by
+    # project_token). Self-hosters override via ENV or config.server_url.
+    DEFAULT_SERVER_URL = "https://app.ezlogs.io"
+
     def initialize
-      @server_url = nil
+      # An empty EZLOGS_SERVER_URL (copied .env templates) means "not set", like the Next.js agent.
+      env_url = ENV["EZLOGS_SERVER_URL"].to_s.strip
+      @server_url = env_url.empty? ? DEFAULT_SERVER_URL : env_url
       @project_token = nil
       @capture_http = true
       @capture_jobs = true

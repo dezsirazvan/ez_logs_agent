@@ -23,10 +23,10 @@ Complete reference for all configuration options.
 ### `server_url`
 
 **Type:** String
-**Required:** Yes
-**Default:** None
+**Required:** No
+**Default:** `ENV["EZLOGS_SERVER_URL"]` if set, otherwise `"https://app.ezlogs.io"`
 
-The URL of your EZLogs server where events will be sent.
+The URL of your EZLogs server where events will be sent. The default is the same for every customer (tenants are identified by API key), so set this only if you self-host.
 
 **Example:**
 ```ruby
@@ -606,7 +606,6 @@ While not directly supported as a configuration option, you can use environment 
 
 ```ruby
 EzLogsAgent.configure do |config|
-  config.server_url = ENV.fetch('EZLOGS_SERVER_URL')
   config.project_token = ENV.fetch('EZLOGS_API_KEY')
 
   config.capture_http = ENV.fetch('EZLOGS_CAPTURE_HTTP', 'true') == 'true'
@@ -624,10 +623,10 @@ end
 ### Example `.env` File
 
 ```bash
-EZLOGS_SERVER_URL=https://app.ezlogs.io
 EZLOGS_API_KEY=ezl_your_api_key_here
 
 # Optional
+EZLOGS_SERVER_URL=https://app.ezlogs.io  # read by the agent itself; only needed if you self-host
 EZLOGS_CAPTURE_HTTP=true
 EZLOGS_CAPTURE_JOBS=true
 EZLOGS_CAPTURE_DATABASE=true
@@ -645,7 +644,7 @@ Configuration is validated when Rails boots. Errors and warnings are logged.
 
 ### Error Messages
 
-**Missing server_url:**
+**Empty server_url** (only if you set it to `nil` / `""`; leave it unset to use the default):
 ```
 [Railtie] Configuration validation failed:
   - server_url is required. Set it in config/initializers/ez_logs_agent.rb
@@ -671,7 +670,7 @@ Configuration is validated when Rails boots. Errors and warnings are logged.
 
 | Setting | Validation |
 |---------|-----------|
-| `server_url` | Must be present, must start with `http://` or `https://` |
+| `server_url` | Must be present (it has a default), must start with `http://` or `https://` |
 | `project_token` | Must be present (the server rejects events without it) |
 | `buffer_size` | Must be positive integer |
 | `send_interval` | Must be positive integer |
@@ -694,7 +693,6 @@ EzLogsAgent.configure do |config|
   # ==========================================
   # Required
   # ==========================================
-  config.server_url = ENV.fetch('EZLOGS_SERVER_URL')
   config.project_token = ENV.fetch('EZLOGS_API_KEY')
 
   # ==========================================

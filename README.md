@@ -111,13 +111,12 @@ Edit `config/initializers/ez_logs_agent.rb`:
 
 ```ruby
 EzLogsAgent.configure do |config|
-  # Required: Your EZLogs server URL
-  config.server_url = "https://app.ezlogs.io"
-
   # Required: Your API key from the EZLogs dashboard
   config.project_token = "ezl_your_api_key_here"
 end
 ```
+
+`server_url` defaults to `ENV["EZLOGS_SERVER_URL"]` if set, otherwise `https://app.ezlogs.io`. Set it only if you self-host.
 
 **That's it.** The agent handles everything else automatically:
 - No middleware registration needed
@@ -291,13 +290,12 @@ HTTP Request
 
 ## Configuration Reference
 
-All options have sensible defaults. **Only `server_url` and `project_token` are required.**
+All options have sensible defaults. **Only `project_token` is required.** `server_url` defaults to `ENV["EZLOGS_SERVER_URL"]` if set, otherwise `https://app.ezlogs.io`.
 
 ### Minimal Configuration
 
 ```ruby
 EzLogsAgent.configure do |config|
-  config.server_url = "https://app.ezlogs.io"
   config.project_token = "ezl_your_api_key_here"
 end
 ```
@@ -310,12 +308,13 @@ EzLogsAgent.configure do |config|
   # Required Settings
   # ==========================================
 
-  # Server URL (where to send events)
-  config.server_url = "https://app.ezlogs.io"
-
   # API Key (get this from your EZLogs dashboard under Settings > API Keys)
   # This is sent as a Bearer token in the Authorization header
   config.project_token = "ezl_your_api_key_here"
+
+  # Server URL (where to send events). Optional: defaults to
+  # ENV["EZLOGS_SERVER_URL"] if set, otherwise https://app.ezlogs.io.
+  # config.server_url = "https://app.ezlogs.io"
 
   # ==========================================
   # Event Capture Toggles
@@ -699,14 +698,14 @@ rails ez_logs_agent:test_connection
 **Example output:**
 ```
 [EzLogsAgent] [Railtie] Configuration validation failed:
-[EzLogsAgent] [Railtie]   - server_url is required. Set it in config/initializers/ez_logs_agent.rb
+[EzLogsAgent] [Railtie]   - project_token is required. Set it in config/initializers/ez_logs_agent.rb
 [EzLogsAgent] [Railtie] Agent initialization skipped. Please fix configuration errors.
 ```
 
 **Solution:** Fix the errors listed in the warning message and restart Rails.
 
 Common validation errors:
-- `server_url is required. Set it in config/initializers/ez_logs_agent.rb` → Set `config.server_url`
+- `server_url is required. Set it in config/initializers/ez_logs_agent.rb` → `config.server_url` was set to an empty value; remove that line to use the default
 - `server_url must be a valid URL (got: …)` → Fix the URL format
 - `project_token is required. Set it in config/initializers/ez_logs_agent.rb` → Set `config.project_token`
 
