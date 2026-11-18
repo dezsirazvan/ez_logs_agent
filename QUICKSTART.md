@@ -277,6 +277,7 @@ EzLogsAgent.configure do |config|
   config.capture_http = true      # HTTP requests
   config.capture_jobs = true      # Background jobs
   config.capture_database = true  # Database changes
+  config.capture_commands = true  # Console lines, rake tasks, runner scripts as actions (0.2.6+)
 end
 ```
 

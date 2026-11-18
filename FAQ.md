@@ -202,6 +202,11 @@ These events still appear in your log—they just won't be grouped with other ev
 - Model class, record ID, operation type
 - Attribute changes (for updates)
 
+**Changes made by hand or on a schedule (0.2.6+):**
+- Database changes made in `rails console` (one action per line), a rake task (one per task) or a `rails runner` script (one per script), named after what ran them: "Rails console (deploy)", "rake orders:backfill", "rails runner"
+- A line or task that only reads makes no action
+- Leave some rake tasks alone with `config.excluded_rake_tasks`, or turn this off with `config.capture_commands = false`
+
 **NOT captured:**
 - Request bodies (except params)
 - Response bodies
