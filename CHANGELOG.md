@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.4] — 2026-11-18
+
+### Added
+- **Actions across services.** Outgoing `Net::HTTP` calls (also Faraday's default adapter, HTTParty, RestClient) and `http` gem (http.rb) calls carry the current correlation id as `X-Correlation-ID`, and an incoming request adopts it when it is the agents' own format and recent (same rule as `ezlogs-nextjs`). A Rails app calling another Rails or Next.js app with an agent (or the other way) now reads as one action. Never over a header the app set, never to the EZLogs server. The header is removed from the request object after the call. Off with `config.propagate_correlation = false` (also for test suites whose VCR cassettes match on all headers).
+
+### Fixed
+- **A refused save is a failure.** A create that renders its `new` view (an update its `edit` view) with status 200 and writes no row showed the form again (older apps, or `render :new` without a status). It was reported as a success; it is now a failure ("Not saved: the form was shown again"), proven from the template actually rendered.
+- Sidekiq retries are numbered right. Sidekiq sets `retry_count` to 0 on the first failure, so the first retry was reported as no retry and every later one one too low. `retry_count` now means earlier failed attempts (absent on a first run), as in the Next.js agent.
+
+### Changed
+- Clearer config errors: a missing key says to set `EZLOGS_API_KEY` in the environment (not to paste it into the initializer); an empty `server_url` says to remove the line to use the default.
+
 ## [0.2.3] — 2026-11-17
 
 ### Changed

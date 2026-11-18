@@ -329,6 +329,11 @@ EzLogsAgent.configure do |config|
   # Capture database changes (default: true)
   config.capture_database = true
 
+  # Stamp X-Correlation-ID on outgoing Net::HTTP calls (Faraday, HTTParty,
+  # RestClient) and the `http` gem, so another service running an EZLogs agent joins the same
+  # action. Incoming calls adopt it only in the agents' own format. Default: true
+  config.propagate_correlation = true
+
   # ==========================================
   # Exclusion Lists
   # ==========================================

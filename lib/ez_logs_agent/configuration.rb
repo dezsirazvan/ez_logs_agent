@@ -36,6 +36,9 @@ module EzLogsAgent
     attr_accessor :capture_http
     attr_accessor :capture_jobs
     attr_accessor :capture_database
+    # Stamp X-Correlation-ID on outgoing Net::HTTP calls so another service
+    # running an EZLogs agent joins the same action (default true).
+    attr_accessor :propagate_correlation
     attr_accessor :excluded_paths
     attr_accessor :excluded_tables
     attr_accessor :excluded_job_classes
@@ -154,6 +157,7 @@ module EzLogsAgent
       @capture_http = true
       @capture_jobs = true
       @capture_database = true
+      @propagate_correlation = true
       @excluded_paths = []                 # User-defined; combined with DEFAULT_EXCLUDED_PATHS
       @excluded_tables = []                # User-defined; combined with DEFAULT_EXCLUDED_TABLES
       @excluded_job_classes = []           # User-defined; combined with DEFAULT_EXCLUDED_JOB_CLASSES

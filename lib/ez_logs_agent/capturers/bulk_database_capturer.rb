@@ -244,6 +244,7 @@ module EzLogsAgent
           return unless operation
 
           model_class = resolve_model_class(payload[:sql])
+          ::EzLogsAgent::RenderedTemplate.wrote_rows! # a write ran, captured or not
           return if model_class.nil?
           return if table_excluded?(model_class)
 

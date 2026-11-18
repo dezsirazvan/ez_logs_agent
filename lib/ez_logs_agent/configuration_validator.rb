@@ -37,14 +37,14 @@ module EzLogsAgent
 
       # Required: server_url must be set
       if config.server_url.nil? || config.server_url.to_s.strip.empty?
-        errors << "server_url is required. Set it in config/initializers/ez_logs_agent.rb"
+        errors << "server_url is required. Remove the config.server_url line to use https://app.ezlogs.io, or set EZLOGS_SERVER_URL"
       elsif !valid_url?(config.server_url)
         errors << "server_url must be a valid URL (got: #{config.server_url})"
       end
 
       # Required: the server rejects every event sent without a token
       if config.project_token.nil? || config.project_token.to_s.strip.empty?
-        errors << "project_token is required. Set it in config/initializers/ez_logs_agent.rb"
+        errors << "project_token is required. Set EZLOGS_API_KEY in the environment (the initializer reads it); do not paste the key into the file"
       end
 
       # Validate numeric fields

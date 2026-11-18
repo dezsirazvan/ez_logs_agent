@@ -91,6 +91,9 @@ module EzLogsAgent
       # Install Database capturer
       install_database_capturer
 
+      # Refused-form detection and cross-service correlation (HTTP capture)
+      install_http_helpers
+
       # Setup FlushScheduler with fork-aware initialization
       setup_flush_scheduler
 
@@ -218,6 +221,15 @@ module EzLogsAgent
       EzLogsAgent::Logger.debug("[Railtie] ActiveJob capturer installed")
     rescue StandardError => e
       EzLogsAgent::Logger.error("[Railtie] Failed to install ActiveJob capturer: #{e.class} - #{e.message}")
+    end
+
+    # The rendered-template subscriber (refused forms) and the outgoing
+    # X-Correlation-ID stamp (cross-service actions). Both fail open.
+    def self.install_http_helpers
+      EzLogsAgent::RenderedTemplate.install if EzLogsAgent.configuration.capture_http
+      EzLogsAgent::OutgoingHttp.install unless EzLogsAgent.configuration.propagate_correlation == false
+    rescue StandardError => e
+      EzLogsAgent::Logger.error("[Railtie] Failed to install HTTP helpers: #{e.class} - #{e.message}")
     end
 
     # Install Database capturers (per-row + bulk).

@@ -29,7 +29,8 @@ module EzLogsAgent
         # Generate correlation_id at request entry
         # This establishes the correlation context for all downstream operations
         # (model callbacks, job enqueues, nested service calls, etc.)
-        setup_correlation
+        setup_correlation(env)
+        EzLogsAgent::RenderedTemplate.reset
 
         start_time = current_time_ms
         status = nil
@@ -173,6 +174,7 @@ module EzLogsAgent
       def capture_event(env, start_time, status, exception, graphql_response_errors = nil)
         duration_ms = current_time_ms - start_time
         outcome, error_message = determine_outcome(status, exception, graphql_response_errors)
+        outcome, error_message = refused_form(env, status, outcome, error_message)
 
         # Convert start_time (ms) to Time object for EventBuilder
         # This ensures events are timestamped at START, not completion
@@ -910,11 +912,11 @@ module EzLogsAgent
         # Ignore - cleanup failure is not critical
       end
 
-      # Setup correlation context for this request
-      # Generates a new correlation_id and stores it in RequestStore
+      # Setup correlation context for this request: the calling service's
+      # correlation_id when trusted (Correlation.for_request), else a new one
       # @return [void]
-      def setup_correlation
-        EzLogsAgent::Correlation.current = EzLogsAgent::Correlation.generate
+      def setup_correlation(env)
+        EzLogsAgent::Correlation.current = EzLogsAgent::Correlation.for_request(env)
       rescue => e
         log_error("setup_correlation failed: #{e.message}")
         # Continue without correlation - better than crashing
@@ -971,6 +973,32 @@ module EzLogsAgent
 
         # 2xx, 3xx, nil = success
         ["success", nil]
+      end
+
+      # A create that renders its "new" view (an update its "edit" view) with 200
+      # and wrote no row showed the form again: the save was refused (validation
+      # errors). Rails
+      # 7+ answers 422 there; older apps and `render :new` without a status
+      # answer 200. Proof from the template actually rendered, never a guess.
+      FORM_VIEW_FOR = { "create" => "new", "update" => "edit" }.freeze
+      WRITE_METHODS = %w[POST PUT PATCH].freeze
+
+      def refused_form(env, status, outcome, error_message)
+        return [outcome, error_message] unless outcome == "success" && status == 200
+        # Without DB capture there is no proof that nothing was written.
+        return [outcome, error_message] unless EzLogsAgent.configuration.capture_database
+        return [outcome, error_message] unless WRITE_METHODS.include?(env["REQUEST_METHOD"])
+
+        form_view = FORM_VIEW_FOR[extract_action(env).to_s]
+        template = EzLogsAgent::RenderedTemplate.first
+        return [outcome, error_message] unless form_view && template
+        return [outcome, error_message] if EzLogsAgent::RenderedTemplate.wrote_rows? # "save and add another"
+        return [outcome, error_message] unless File.basename(template.to_s).split(".").first == form_view
+
+        ["failure", "Not saved: the form was shown again"]
+      rescue => e
+        log_error("refused_form failed: #{e.message}")
+        [outcome, error_message]
       end
 
       # Get current time in milliseconds

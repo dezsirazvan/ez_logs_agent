@@ -193,6 +193,7 @@ module EzLogsAgent
         # @param context [Hash, nil] Optional context with change information
         # @return [void]
         def capture_event(model, operation, context: nil)
+          ::EzLogsAgent::RenderedTemplate.wrote_rows! # a row was written, captured or not
           return if table_excluded?(model)
 
           event = EzLogsAgent::EventBuilder.build(

@@ -203,9 +203,17 @@ module EzLogsAgent
             job_class: resolve_job_class(worker, job),
             job_id: job["jid"],
             queue: queue,
-            retry_count: job["retry_count"],
+            retry_count: retry_number(job),
             arguments: extract_arguments(job)
           }.compact
+        end
+
+        # Which retry this run is. Sidekiq's failure counter "retry_count" is 0 after
+        # the first failure and grows by 1 per later failure, so a run carrying it is
+        # retry number retry_count + 1; a first run has none (same truthy check as
+        # Sidekiq). Not covered: ActiveJob retry_on re-enqueues (a new job each time).
+        def retry_number(job)
+          job["retry_count"] ? job["retry_count"].to_i + 1 : nil
         end
 
         # Sanitize the job's arguments. Sidekiq stores them in
