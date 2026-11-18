@@ -403,6 +403,18 @@ module EzLogsAgent
     # Load rake tasks
     rake_tasks do
       load "tasks/ez_logs_agent.rake"
+      # Each rake task someone runs (by hand, cron, a deploy) reads as one action.
+      EzLogsAgent::Command.install_rake
+    end
+
+    # Each line typed in `rails console` that changes data reads as one action.
+    console do
+      EzLogsAgent::Command.install_console
+    end
+
+    # A `rails runner` script (cron's usual entry point) reads as one action.
+    runner do
+      EzLogsAgent::Command.start(actor_id: "runner", label: "rails runner")
     end
   end
 end

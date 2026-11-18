@@ -56,6 +56,10 @@ EzLogsAgent.configure do |config|
   # Built-in: SidekiqAlive::Worker, SolidQueue::CleanupJob, SolidQueue::RecurringJob
   # config.excluded_job_classes = ["MyApp::HealthCheckJob", "MyApp::MetricsJob"]
 
+  # Each rake task you run reads as one action ("rake orders:backfill"); tasks listed here are left
+  # alone (added to built-in defaults: job workers such as jobs:work, resque:work, solid_queue:start)
+  # config.excluded_rake_tasks = ["my_app:worker"]
+
   # Additional GraphQL operations to exclude from capture (added to built-in defaults)
   # Built-in: IntrospectionQuery, __* (all introspection fields like __schema, __type)
   # Supports exact match and prefix match (patterns ending with *)

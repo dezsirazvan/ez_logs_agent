@@ -287,9 +287,9 @@ module EzLogsAgent
             source_type: :bulk_database,
             source_data: source_data,
             outcome: :success,
-            correlation_id: ::EzLogsAgent::Correlation.current,
+            correlation_id: ::EzLogsAgent::Command.correlation,
             resource_ids: build_resource_ids(model_class, source_data[:row_count]),
-            context: nil,
+            context: ::EzLogsAgent::Command.with_actor(nil),
             duration_ms: duration_ms
           )
 

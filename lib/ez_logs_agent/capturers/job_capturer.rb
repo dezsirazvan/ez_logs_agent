@@ -50,7 +50,9 @@ module EzLogsAgent
             # Only inject if:
             # 1. correlation_id is present and not empty
             # 2. job doesn't already have one
-            if correlation_id && correlation_id.respond_to?(:empty?) && !correlation_id.empty? && !job.key?("correlation_id")
+            # (A console line's or rake task's own id is not carried: its jobs are their own actions.)
+            if correlation_id && correlation_id.respond_to?(:empty?) && !correlation_id.empty? && !job.key?("correlation_id") &&
+               !EzLogsAgent::Command.owns?(correlation_id)
               job["correlation_id"] = correlation_id
             end
           rescue StandardError => e
@@ -101,6 +103,14 @@ module EzLogsAgent
         # @yield Executes the job
         # @return [void]
         def call(worker, job, queue)
+          # The caller's correlation, put back afterwards on every path (early returns included): a
+          # job run inline (Sidekiq::Testing, a console line, a rake task) must not wipe it.
+          previous_correlation = begin
+            EzLogsAgent::Correlation.current
+          rescue StandardError
+            nil # never stop the job over this
+          end
+
           # Skip capture if disabled
           return yield unless EzLogsAgent.configuration.capture_jobs
 
@@ -117,7 +127,7 @@ module EzLogsAgent
 
           # Measure execution time
           start_time = Time.now
-          result = yield
+          result = EzLogsAgent::Command.in_job { yield }
           duration_ms = ((Time.now - start_time) * 1000).to_i
 
           # Capture success event
@@ -125,12 +135,20 @@ module EzLogsAgent
 
           result
         rescue StandardError => error
-          # Capture failure event, then re-raise
-          capture_failure(worker, job, queue, correlation_id, error, start_time)
+          # Capture failure event (only for a job this middleware started timing), then re-raise
+          capture_failure(worker, job, queue, correlation_id, error, start_time) if start_time
           raise
         ensure
-          # Always clear correlation_id
-          EzLogsAgent::Correlation.clear
+          # Put the caller's correlation back (none in a worker process: cleared, as before)
+          begin
+            if previous_correlation
+              EzLogsAgent::Correlation.current = previous_correlation
+            else
+              EzLogsAgent::Correlation.clear
+            end
+          rescue StandardError
+            nil # never let the cleanup replace the job's own result or error
+          end
         end
 
         private

@@ -163,7 +163,7 @@ All exclusion lists are **additive** — they add to built-in defaults, not repl
 **Required:** No
 **Default:** `[]` (uses built-in defaults only)
 
-Additional HTTP paths to exclude from capture. With HTTP capture on (`capture_http`, the default), an excluded request is not captured, and neither is what its thread does while it runs: database writes, bulk operations, job enqueues, and jobs run inline (`perform_now`, an inline adapter). Jobs it enqueues to a queue are captured when they run, as their own actions. Work on other threads, and writes made while a streamed response body is sent, are still captured, without a correlation id.
+Additional HTTP paths to exclude from capture. With HTTP capture on (`capture_http`, the default), an excluded request is not captured, and neither is what its thread does while it runs that carries no correlation id: its database writes, bulk operations and job enqueues. A job it runs inline (`perform_now`) has its own correlation id and is captured; jobs it enqueues to a queue are captured when they run, as their own actions. Work on other threads, and writes made while a streamed response body is sent, are still captured, without a correlation id.
 
 **Example:**
 ```ruby
@@ -250,6 +250,27 @@ config.excluded_job_classes = [
 - Metrics collection jobs
 - Heartbeat/ping jobs
 - Internal maintenance jobs
+
+---
+
+### `excluded_rake_tasks`
+
+**Type:** Array of Strings
+**Required:** No
+**Default:** `[]` (uses built-in defaults only)
+
+Each rake task you run reads in EZLogs as one action, "rake orders:backfill", with the database changes it made (the console and `rails runner` work the same way). A task listed here is left alone: its changes are captured as they were before, without being grouped under the task.
+
+**Example:**
+```ruby
+config.excluded_rake_tasks = ["my_app:worker", "db:*"]
+```
+
+**Pattern matching:** exact task name, or a `*` suffix for a prefix (`"db:*"` matches `db:seed`, `db:migrate`).
+
+**Built-in exclusions** (tasks that run a job worker for the life of the process, whose jobs must stay separate actions):
+- `jobs:work*` (delayed_job), `resque:work*`, `resque:scheduler`, `qc:work*` (queue_classic)
+- `solid_queue:start`, `good_job:start`, `sneakers:run`, `que:work`
 
 ---
 

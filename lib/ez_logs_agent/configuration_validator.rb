@@ -91,6 +91,10 @@ module EzLogsAgent
         errors << "excluded_job_classes must be an array (got: #{config.excluded_job_classes.class})"
       end
 
+      if config.excluded_rake_tasks && !config.excluded_rake_tasks.is_a?(Array)
+        errors << "excluded_rake_tasks must be an array (got: #{config.excluded_rake_tasks.class})"
+      end
+
       if config.excluded_graphql_operations && !config.excluded_graphql_operations.is_a?(Array)
         errors << "excluded_graphql_operations must be an array (got: #{config.excluded_graphql_operations.class})"
       end

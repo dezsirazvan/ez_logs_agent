@@ -96,6 +96,7 @@ module EzLogsAgent
         def propagate_correlation(job)
           correlation_id = EzLogsAgent::Correlation.current
           return unless correlation_id && !correlation_id.empty?
+          return if EzLogsAgent::Command.owns?(correlation_id) # enqueued from a console line / task
 
           job.ezlogs_correlation_id = correlation_id
         rescue StandardError => e
@@ -120,6 +121,14 @@ module EzLogsAgent
         # @param block [Proc] The job execution block
         # @return [Object] The result of the job execution
         def capture_execution(job, block)
+          # Save the previous correlation (from HTTP middleware or parent job) first, so the ensure
+          # puts it back on every path, early returns included
+          previous_correlation = begin
+            EzLogsAgent::Correlation.current
+          rescue StandardError
+            nil # never stop the job over this
+          end
+
           # Memoized at install time for hot-path perf. If we haven't
           # installed yet (specs that test capture_execution directly),
           # fall back to a live config read so the behavior matches.
@@ -136,30 +145,35 @@ module EzLogsAgent
             return block.call
           end
 
-          # Save the previous correlation (from HTTP middleware or parent job)
-          # so we can restore it after the job completes
-          previous_correlation = EzLogsAgent::Correlation.current
 
-          # Use job's propagated correlation, fall back to current context, or generate new
-          correlation_id = extract_correlation(job) || previous_correlation || EzLogsAgent::Correlation.generate
+          # Use job's propagated correlation, fall back to current context, or generate new. A job run
+          # inside a console line / rake task / runner (EzLogsAgent::Command) never inherits it: a
+          # worker loop run as a task would otherwise fold unrelated jobs into the task's action.
+          inherited = previous_correlation unless EzLogsAgent::Command.actor
+          correlation_id = extract_correlation(job) || inherited || EzLogsAgent::Correlation.generate
           EzLogsAgent::Correlation.current = correlation_id
 
           start_time = Time.now
-          result = block.call
+          result = EzLogsAgent::Command.in_job { block.call }
           duration_ms = ((Time.now - start_time) * 1000).to_i
 
           capture_success(job, correlation_id, duration_ms, start_time)
           result
         rescue StandardError => error
-          capture_failure(job, correlation_id, error, start_time)
+          # Only a job this capturer started timing (not one skipped above: capture off, excluded)
+          capture_failure(job, correlation_id, error, start_time) if start_time
           raise
         ensure
           # Restore previous correlation instead of unconditionally clearing.
           # This is critical for inline jobs that run in the same thread as the caller.
-          if previous_correlation
-            EzLogsAgent::Correlation.current = previous_correlation
-          else
-            EzLogsAgent::Correlation.clear
+          begin
+            if previous_correlation
+              EzLogsAgent::Correlation.current = previous_correlation
+            else
+              EzLogsAgent::Correlation.clear
+            end
+          rescue StandardError
+            nil # never let the cleanup replace the job's own result or error
           end
         end
 

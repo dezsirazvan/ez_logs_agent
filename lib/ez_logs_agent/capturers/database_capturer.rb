@@ -203,9 +203,9 @@ module EzLogsAgent
               operation: operation
             },
             outcome: :success,
-            correlation_id: EzLogsAgent::Correlation.current,
+            correlation_id: EzLogsAgent::Command.correlation,
             resource_ids: extract_resource_ids(model),
-            context: context,
+            context: EzLogsAgent::Command.with_actor(context),
             duration_ms: nil
           )
 

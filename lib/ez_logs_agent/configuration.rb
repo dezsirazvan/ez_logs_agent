@@ -21,6 +21,9 @@ module EzLogsAgent
   # === Background Jobs (capturers/job_capturer.rb)
   # - excluded_job_classes: Job class names to ignore (health checks, etc.)
   #
+  # === Console, rake, runner (command.rb)
+  # - excluded_rake_tasks: rake tasks not grouped into one action (job workers run as rake tasks)
+  #
   # == Server-Side vs Agent-Side Filtering
   #
   # The filtering philosophy:
@@ -42,6 +45,7 @@ module EzLogsAgent
     attr_accessor :excluded_paths
     attr_accessor :excluded_tables
     attr_accessor :excluded_job_classes
+    attr_accessor :excluded_rake_tasks
     attr_accessor :excluded_graphql_operations
     attr_accessor :excluded_graphql_variable_keys
     attr_accessor :buffer_size
@@ -138,6 +142,20 @@ module EzLogsAgent
       "SolidQueue::RecurringJob"          # SolidQueue scheduler internals
     ].freeze
 
+    # Rake tasks that run a job worker for the life of the process: grouped as one command, every
+    # job and every bookkeeping write would pile into one endless action. Their jobs are captured
+    # as jobs, as before. Supports exact match and prefix match (patterns ending with *).
+    DEFAULT_EXCLUDED_RAKE_TASKS = [
+      "jobs:work*",                       # delayed_job (jobs:work, jobs:workoff)
+      "resque:work*",                     # Resque (resque:work, resque:workers)
+      "resque:scheduler",                 # resque-scheduler
+      "solid_queue:start",                # Solid Queue supervisor
+      "good_job:start",                   # GoodJob
+      "sneakers:run",                     # Sneakers
+      "que:work",                         # Que
+      "qc:work*"                          # queue_classic
+    ].freeze
+
     # Default GraphQL operations excluded from capture - introspection and IDE queries
     # Supports exact match and prefix match (patterns ending with *)
     DEFAULT_EXCLUDED_GRAPHQL_OPERATIONS = [
@@ -161,6 +179,7 @@ module EzLogsAgent
       @excluded_paths = []                 # User-defined; combined with DEFAULT_EXCLUDED_PATHS
       @excluded_tables = []                # User-defined; combined with DEFAULT_EXCLUDED_TABLES
       @excluded_job_classes = []           # User-defined; combined with DEFAULT_EXCLUDED_JOB_CLASSES
+      @excluded_rake_tasks = []            # User-defined; combined with DEFAULT_EXCLUDED_RAKE_TASKS
       @excluded_graphql_operations = []    # User-defined; combined with DEFAULT_EXCLUDED_GRAPHQL_OPERATIONS
       @excluded_graphql_variable_keys = [] # User-defined; additional sensitive variable key patterns to filter
       @buffer_size = 10_000                # Increased for high-volume workloads (job-heavy apps)
@@ -184,6 +203,10 @@ module EzLogsAgent
     # Returns all excluded job classes (defaults + user-configured)
     def all_excluded_job_classes
       DEFAULT_EXCLUDED_JOB_CLASSES + (@excluded_job_classes || [])
+    end
+
+    def all_excluded_rake_tasks
+      DEFAULT_EXCLUDED_RAKE_TASKS + (@excluded_rake_tasks || [])
     end
 
     # Returns all excluded GraphQL operations (defaults + user-configured)

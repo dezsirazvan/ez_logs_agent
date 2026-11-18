@@ -253,6 +253,24 @@ ActiveRecord create, update, and destroy operations:
 - `active_storage_*` — ActiveStorage internal tables
 - `solid_queue_*`, `solid_cache_*`, `solid_cable_*` — Solid* gem internals
 
+### 4. Changes made by hand or on a schedule
+
+A change made outside any request or job reads as an action too, named after what ran it:
+
+| Where | One action per | Shown as |
+|---|---|---|
+| `rails console` (IRB or Pry) | line that changes data | "Rails console (deploy)", from the OS account (`USER`) that opened it |
+| `rake` / `bin/rails some:task` | task (a task invoked from its body joins it; each prerequisite is its own) | "rake orders:backfill" |
+| `rails runner` (cron's usual entry point) | script | "rails runner" |
+
+Only database changes are grouped there; a line that only reads makes no action. A run longer
+than 10 minutes continues as a new action with the same name every 10 minutes. A job enqueued
+there, or captured as a job when run there, is its own action, so a task enqueuing thousands of jobs
+never becomes one huge action. (A job EZLogs does not capture, such as an excluded class, joins the
+line or task that ran it.) Rake tasks that run a job worker for the life of the process
+(`jobs:work`, `resque:work`, `solid_queue:start`, `good_job:start`, …) are left alone; add your own
+with `config.excluded_rake_tasks`. Work started on other threads is not grouped.
+
 ---
 
 ## How Correlation Works

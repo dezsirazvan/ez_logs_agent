@@ -15,7 +15,9 @@ module EzLogsAgent
       # @param event [Hash] Event hash from EventBuilder
       # @return [void]
       def push(event)
-        return if EzLogsAgent::Correlation.excluded? # emitted inside an excluded request
+        # Inside an excluded request only the orphans are dropped: an event with no correlation id.
+        # A job run there (perform_now) has its own id and keeps its events.
+        return if EzLogsAgent::Correlation.excluded? && (event[:correlation_id] || event["correlation_id"]).nil?
 
         @monitor.synchronize do
           if @queue.size >= max_size

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.6] — 2026-11-18
+
+### Added
+- **Changes made by hand or on a schedule show up.** A database change made outside any request or job (in `rails console`, a rake task, a `rails runner` script, so also cron) had no correlation id: it never formed an action and never showed anywhere. Now each console line that changes data, each rake task and each runner script is one action, named after what ran it: "Rails console (deploy)" (the OS account from `USER`), "rake orders:backfill", "rails runner" (an actor of kind `system` on its database events). Works with IRB and Pry (pry-rails). Inside a request or a job nothing changes. A run longer than 10 minutes continues as a new action with the same name every 10 minutes. A job enqueued there, or captured as a job when run there, is its own action (a task enqueuing thousands of jobs never becomes one huge action; a job EZLogs does not capture joins the run); outgoing HTTP calls carry the run's id as `X-Correlation-ID`, as from a request. Rake tasks that run a job worker (`jobs:work`, `resque:work`, `solid_queue:start`, `good_job:start`, …) are left alone; add your own with the new `config.excluded_rake_tasks`. Each rake prerequisite is its own action. Work on other threads is not grouped.
+
+### Changed
+- **Excluded paths drop only orphan events.** Inside a request on an excluded path, only events with no correlation id are dropped now (0.2.5 dropped everything the request's thread emitted). A job run there (`perform_now`) has its own correlation id and keeps its events.
+
+### Fixed
+- A job whose capture was skipped (capture off, excluded class, the Sidekiq adapter) and that raised emitted a failure event with no correlation id. It no longer does.
+- A job run inline (Sidekiq::Testing, `perform_now`, a skipped job) no longer clears the correlation of the request or console line that ran it.
+
 ## [0.2.5] — 2026-11-18
 
 ### Fixed
