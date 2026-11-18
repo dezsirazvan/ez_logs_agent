@@ -23,7 +23,9 @@ module EzLogsAgent
       # @param env [Hash] Rack environment
       # @return [Array] Rack response tuple [status, headers, body]
       def call(env)
-        # Skip capturing if disabled or path excluded
+        # An excluded path captures nothing at all, its database writes and job enqueues included.
+        return EzLogsAgent::Correlation.excluding { @app.call(env) } if excluded_path?(env)
+        # Skip capturing if HTTP capture is disabled
         return @app.call(env) unless should_capture?(env)
 
         # Generate correlation_id at request entry
@@ -81,7 +83,6 @@ module EzLogsAgent
       # @return [Boolean]
       def should_capture?(env)
         return false unless capture_enabled?
-        return false if excluded_path?(env)
         true
       rescue => e
         log_error("should_capture? failed: #{e.message}")

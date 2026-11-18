@@ -15,6 +15,8 @@ module EzLogsAgent
       # @param event [Hash] Event hash from EventBuilder
       # @return [void]
       def push(event)
+        return if EzLogsAgent::Correlation.excluded? # emitted inside an excluded request
+
         @monitor.synchronize do
           if @queue.size >= max_size
             @queue.shift

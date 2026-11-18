@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.5] — 2026-11-18
+
+### Fixed
+- **Excluded paths exclude what happens inside them.** A request on an `excluded_paths` path (or a built-in one such as `/health*`) was not captured, but the database writes, bulk operations and job enqueues it made still were, with no correlation id. They could never join an action, so they never showed anywhere and still took up storage. Now, with HTTP capture on, nothing the request's thread emits while it runs is sent, inline jobs included. Jobs it enqueues to a queue are still captured when they run, as their own actions. Not covered: work on other threads, and writes made while a streamed body is sent.
+
 ## [0.2.4] — 2026-11-18
 
 ### Added

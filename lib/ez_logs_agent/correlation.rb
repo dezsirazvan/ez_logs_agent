@@ -54,6 +54,29 @@ module EzLogsAgent
       RequestStore.store[STORE_KEY] = value
     end
 
+    EXCLUDED_KEY = :ez_logs_excluded_request
+
+    # While the app handles a request it excluded (config.excluded_paths), nothing its thread emits is
+    # captured: its database writes and job enqueues would otherwise ship with no correlation, never
+    # shown yet still stored. Restores the outer state, so a nested excluded call keeps the outer one.
+    # shortcut: work on other threads, or in a streamed body after `call` returns, is still captured
+    # uncorrelated; wrap the body / propagate the flag if that shows up in practice.
+    def self.excluding
+      previous = RequestStore.store[EXCLUDED_KEY]
+      RequestStore.store[EXCLUDED_KEY] = true
+      yield
+    ensure
+      if previous.nil?
+        RequestStore.store.delete(EXCLUDED_KEY)
+      else
+        RequestStore.store[EXCLUDED_KEY] = previous
+      end
+    end
+
+    def self.excluded?
+      RequestStore.store[EXCLUDED_KEY] == true
+    end
+
     # Clear the current correlation ID
     #
     # @return [void]

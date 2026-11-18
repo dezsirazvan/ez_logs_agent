@@ -338,7 +338,7 @@ EzLogsAgent.configure do |config|
   # Exclusion Lists
   # ==========================================
 
-  # Additional HTTP paths to exclude
+  # Additional HTTP paths to exclude (with the database writes and job enqueues inside them)
   # Use * suffix for prefix matching (e.g., "/admin*" matches "/admin/users")
   # These are ADDED to the built-in defaults (health checks, assets, etc.)
   config.excluded_paths = ["/admin*", "/internal*", "/api/internal*"]

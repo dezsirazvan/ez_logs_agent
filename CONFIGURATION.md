@@ -163,7 +163,7 @@ All exclusion lists are **additive** — they add to built-in defaults, not repl
 **Required:** No
 **Default:** `[]` (uses built-in defaults only)
 
-Additional HTTP paths to exclude from capture.
+Additional HTTP paths to exclude from capture. With HTTP capture on (`capture_http`, the default), an excluded request is not captured, and neither is what its thread does while it runs: database writes, bulk operations, job enqueues, and jobs run inline (`perform_now`, an inline adapter). Jobs it enqueues to a queue are captured when they run, as their own actions. Work on other threads, and writes made while a streamed response body is sent, are still captured, without a correlation id.
 
 **Example:**
 ```ruby
