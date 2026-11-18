@@ -37,6 +37,11 @@ module EzLogsAgent
       credit_card card_number cvv cvc
     ].freeze
 
+    # Short secret names matched only as a WHOLE word of the key (split on non-letters and
+    # camelCase), so `pin` matches `pin`, `pinCode`, `mdm_unlock_pin` but never `shipping`.
+    # Same list as the Next.js agent's SENSITIVE_WORD_PATTERNS.
+    WORD_PATTERNS = %w[pin otp totp iban mfa passphrase].freeze
+
     module_function
 
     # @param key [String, Symbol, nil]
@@ -46,10 +51,16 @@ module EzLogsAgent
       return false if key.nil?
 
       key_lower = key.to_s.downcase
-      return true if PATTERNS.any? { |pattern| key_lower.include?(pattern) }
+      words = key.to_s.gsub(/([a-z0-9])([A-Z])/, '\1_\2').downcase.split(/[^a-z0-9]+/)
+      return true if WORD_PATTERNS.intersect?(words)
+
+      # Substring patterns, on the key as written and on its words joined with "_" (so `apiKey`
+      # and `api-key` match `api_key` too): only ever more matches than the key alone.
+      joined = words.join("_")
+      return true if PATTERNS.any? { |pattern| key_lower.include?(pattern) || joined.include?(pattern) }
 
       user_patterns = user_patterns_cache
-      user_patterns.any? { |pattern| key_lower.include?(pattern) }
+      user_patterns.any? { |pattern| key_lower.include?(pattern) || joined.include?(pattern) }
     rescue StandardError
       # Defensive: if configuration access raises, treat as sensitive.
       # Better to over-mask than to leak.

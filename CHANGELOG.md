@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.7] — 2026-11-19
+
+### Changed
+- **More secret names are hidden.** `pin`, `otp`, `totp`, `iban`, `mfa` and `passphrase` are matched as whole words (so `pin_code` and `mdmUnlockPin`, never `shipping`), the same list as the Next.js agent. camelCase and dashed names match like their snake_case form: `apiKey`, `api-key`, `creditCard`, `cardNumber` are hidden (they were not).
+
 ## [0.2.6] — 2026-11-18
 
 ### Added
