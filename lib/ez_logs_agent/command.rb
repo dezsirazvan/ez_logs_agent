@@ -34,6 +34,7 @@ module EzLogsAgent
       # Starts a command with no end (a `rails runner` script: the rest of the process).
       # @return [Boolean] whether a command was started
       def start(actor_id:, label:)
+        return false unless EzLogsAgent.configuration.capture_commands
         return false if EzLogsAgent::Correlation.current
 
         id = EzLogsAgent::Correlation.generate

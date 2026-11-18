@@ -253,6 +253,23 @@ config.excluded_job_classes = [
 
 ---
 
+### `capture_commands`
+
+**Type:** Boolean
+**Required:** No
+**Default:** `true`
+
+Group the database changes made in `rails console` (one action per line), a rake task (one per task) and a `rails runner` script (one per script) into actions named after what ran them ("Rails console (deploy)", "rake orders:backfill", "rails runner"). With `false` their changes are sent as before 0.2.6: without a correlation id, so they show nowhere.
+
+**Example:**
+```ruby
+config.capture_commands = false
+```
+
+To silence only some rake tasks (frequent cron housekeeping, say), keep this on and use `excluded_rake_tasks`.
+
+---
+
 ### `excluded_rake_tasks`
 
 **Type:** Array of Strings

@@ -56,8 +56,10 @@ EzLogsAgent.configure do |config|
   # Built-in: SidekiqAlive::Worker, SolidQueue::CleanupJob, SolidQueue::RecurringJob
   # config.excluded_job_classes = ["MyApp::HealthCheckJob", "MyApp::MetricsJob"]
 
-  # Each rake task you run reads as one action ("rake orders:backfill"); tasks listed here are left
-  # alone (added to built-in defaults: job workers such as jobs:work, resque:work, solid_queue:start)
+  # Each console line, rake task and runner script that changes data reads as one action
+  # ("rake orders:backfill"). Turn it off entirely, or leave some rake tasks alone (added to the
+  # built-in defaults: job workers such as jobs:work, resque:work, solid_queue:start)
+  # config.capture_commands = false
   # config.excluded_rake_tasks = ["my_app:worker"]
 
   # Additional GraphQL operations to exclude from capture (added to built-in defaults)

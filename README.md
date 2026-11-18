@@ -269,7 +269,8 @@ there, or captured as a job when run there, is its own action, so a task enqueui
 never becomes one huge action. (A job EZLogs does not capture, such as an excluded class, joins the
 line or task that ran it.) Rake tasks that run a job worker for the life of the process
 (`jobs:work`, `resque:work`, `solid_queue:start`, `good_job:start`, …) are left alone; add your own
-with `config.excluded_rake_tasks`. Work started on other threads is not grouped.
+with `config.excluded_rake_tasks`, or turn the whole grouping off with `config.capture_commands = false`.
+Work started on other threads is not grouped.
 
 ---
 

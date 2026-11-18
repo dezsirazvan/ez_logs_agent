@@ -74,6 +74,10 @@ module EzLogsAgent
         errors << "capture_jobs must be true or false (got: #{config.capture_jobs})"
       end
 
+      unless [true, false].include?(config.capture_commands)
+        errors << "capture_commands must be true or false (got: #{config.capture_commands})"
+      end
+
       unless [true, false].include?(config.capture_database)
         errors << "capture_database must be true or false (got: #{config.capture_database})"
       end

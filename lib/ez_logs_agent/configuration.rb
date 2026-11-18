@@ -22,6 +22,7 @@ module EzLogsAgent
   # - excluded_job_classes: Job class names to ignore (health checks, etc.)
   #
   # === Console, rake, runner (command.rb)
+  # - capture_commands: false turns the grouping off (their writes are sent as before 0.2.6)
   # - excluded_rake_tasks: rake tasks not grouped into one action (job workers run as rake tasks)
   #
   # == Server-Side vs Agent-Side Filtering
@@ -38,6 +39,7 @@ module EzLogsAgent
     attr_accessor :project_token
     attr_accessor :capture_http
     attr_accessor :capture_jobs
+    attr_accessor :capture_commands
     attr_accessor :capture_database
     # Stamp X-Correlation-ID on outgoing Net::HTTP calls so another service
     # running an EZLogs agent joins the same action (default true).
@@ -174,6 +176,7 @@ module EzLogsAgent
       @project_token = nil
       @capture_http = true
       @capture_jobs = true
+      @capture_commands = true             # console lines, rake tasks, runner scripts as actions (command.rb)
       @capture_database = true
       @propagate_correlation = true
       @excluded_paths = []                 # User-defined; combined with DEFAULT_EXCLUDED_PATHS
