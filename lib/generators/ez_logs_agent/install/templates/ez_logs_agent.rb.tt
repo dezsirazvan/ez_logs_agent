@@ -100,20 +100,19 @@ EzLogsAgent.configure do |config|
   # When a database callback fires, the agent resolves a human-readable name
   # for the affected record using the configured field.
   #
-  # Fallback chain: configured field → name → title → number → nil
+  # Fallback chain: configured field → name → title → number → label → <model>_number,
+  # else the record shows by its short id ("Updated employee #b38a…a236").
   #
   # Example:
   # config.display_name_for = {
-  #   "User" => :email,    # Use email field for User models
-  #   "Product" => :name,  # Use name field for Product models
-  #   "Order" => :number   # Use number field for Order models
+  #   "Employee" => :full_name, # a method on the model
+  #   "Order" => :reference
   # }
   #
-  # This enables action titles like:
-  # - "User updated 'john@example.com'" instead of just "User updated"
-  # - "Product created 'Premium Widget'" instead of just "Product created"
+  # This enables action titles like "Updated employee 'Ana Pop'" and "Created order 'ORD-1042'".
   #
-  # IMPORTANT: Only use direct attributes, not associations (would trigger DB queries)
+  # IMPORTANT: Only use direct attributes, not associations (would trigger DB queries).
+  # Never an email, a phone number, a password, a token or other secret: names show on shared links.
 
   # =============================================================================
   # ACTOR CONTEXT (Who Triggered This?)

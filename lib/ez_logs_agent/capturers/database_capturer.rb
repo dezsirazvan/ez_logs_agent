@@ -233,9 +233,7 @@ module EzLogsAgent
         #
         # Uses configuration if provided, otherwise falls back to common patterns:
         # 1. Custom field from config.display_name_for[ModelClass]
-        # 2. model.name (if responds)
-        # 3. model.title (if responds)
-        # 4. model.number (if responds)
+        # 2. name, title, number, label, then <model>_number (if it responds), the first present
         #
         # Returns nil if no meaningful name found. The frontend can decide
         # to show the resource ID as a fallback if needed.
@@ -246,26 +244,29 @@ module EzLogsAgent
         #
         # @param model [ActiveRecord::Base] The model instance
         # @return [String, nil] The display name, or nil if no meaningful name found
+        def singular_name(model)
+          klass = model.class
+          klass.respond_to?(:model_name) ? klass.model_name.singular : klass.name.to_s.underscore.tr("/", "_")
+        end
+
         def resolve_display_name(model)
           # Check for configured custom field (memoized list, see install).
           custom_field = @display_name_for[model.class.name]
 
-          if custom_field && model.respond_to?(custom_field)
+          # A name shows on shared links and in MCP: never read one from a secret-named attribute.
+          if custom_field && !EzLogsAgent::SensitivePatterns.match?(custom_field) && model.respond_to?(custom_field)
             value = model.public_send(custom_field)
             return value.to_s if value.present?
           end
 
-          # Fallback chain: name → title → number
-          if model.respond_to?(:name) && model.name.present?
-            return model.name.to_s
-          end
+          # Fallback chain, the same as ezlogs-nextjs and the Supabase install:
+          # name → title → number → label → <model>_number (Billing::Invoice: "billing_invoice_number",
+          # as its table billing_invoices reads on the server), never a secret-named one ("card_number").
+          [:name, :title, :number, :label, :"#{singular_name(model)}_number"].each do |attr|
+            next if EzLogsAgent::SensitivePatterns.match?(attr) || !model.respond_to?(attr)
 
-          if model.respond_to?(:title) && model.title.present?
-            return model.title.to_s
-          end
-
-          if model.respond_to?(:number) && model.number.present?
-            return model.number.to_s
+            value = model.public_send(attr)
+            return value.to_s if value.present?
           end
 
           # No meaningful name found - return nil

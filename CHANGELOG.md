@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.10] — 2026-11-21
+
+### Changed
+- **Records are named the same way in every EZLogs agent.** Without `display_name_for`, a record is named by its `name`, `title`, `number`, then (new) `label` or `<model>_number` (`invoice_number`), the same chain as ezlogs-nextjs and the Supabase install. A record with none shows by its short id (`#42`, `#b38a…a236`).
+- Docs and the generated initializer no longer suggest an email as a record's name: names show on shared links.
+
 ## [0.2.9] — 2026-11-21
 
 ### Changed

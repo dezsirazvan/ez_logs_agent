@@ -402,12 +402,11 @@ EzLogsAgent.configure do |config|
   # ==========================================
 
   # Configure how to display human-readable names for database records
-  # This affects how action titles appear (e.g., "User updated 'john@example.com'")
+  # This affects how action titles appear (e.g., "Updated employee 'Ana Pop'")
   # See "Display Names" section below for details
   config.display_name_for = {
-    "User" => :email,        # Use the email field for User models
-    "Product" => :name,      # Use the name field for Product models
-    "Order" => :number       # Use the number field for Order models
+    "Employee" => :full_name, # a method on the model
+    "Order" => :reference
   }
 
   # ==========================================
@@ -462,42 +461,41 @@ end
 
 ## Display Names — Human-Readable Resource Identifiers
 
-By default, action titles show database record IDs: `"User updated #123"`. With display name resolution, you can show meaningful identifiers instead: `"User updated 'john@example.com'"`.
+A record without a name shows by its short id: `"Updated employee #b38a…a236"`. With display name resolution, it shows by what identifies it to a person: `"Updated employee 'Ana Pop'"`.
 
 ### Configuration
 
 ```ruby
 EzLogsAgent.configure do |config|
   config.display_name_for = {
-    "User" => :email,      # "User created 'john@example.com'"
-    "Product" => :name,    # "Product updated 'Premium Widget'"
-    "Order" => :number     # "Order deleted '#ORD-1234'"
+    "Employee" => :full_name, # "Updated employee 'Ana Pop'"
+    "Order" => :reference     # "Created order 'ORD-1042'"
   }
 end
 ```
+
+Never an email, a phone number, a password, a token or other secret: names show on shared links.
 
 ### How It Works
 
 When a database callback fires (create, update, delete), the agent resolves a display name:
 
-1. **If configured:** Use the specified field (e.g., `User → :email`)
-2. **Otherwise, try defaults:** `name` → `title` → `number` (in that order)
-3. **If nothing found:** Fall back to `#id` (e.g., `#123`)
+1. **If configured:** Use the specified method (e.g., `Order → :reference`)
+2. **Otherwise, try defaults:** `name` → `title` → `number` → `label` → `<model>_number` (the same as ezlogs-nextjs and the Supabase install)
+3. **If nothing found:** EZLogs shows the record by its short id (`#123`, `#b38a…a236`)
 
 ### Examples
 
 **Before:**
 ```
-User created
-Product updated #456
-Order deleted #789
+Updated employee #b38a…a236
+Deleted order #789
 ```
 
 **After:**
 ```
-User created 'jessica@example.com'
-Product updated 'Premium Subscription Plan'
-Order deleted '#ORD-2025-0789'
+Updated employee 'Ana Pop'
+Deleted order 'ORD-2025-0789'
 ```
 
 ### Important Constraints
@@ -506,7 +504,7 @@ Order deleted '#ORD-2025-0789'
 
 ```ruby
 # ✅ GOOD - Direct attribute
-config.display_name_for = { "User" => :email }
+config.display_name_for = { "Order" => :reference }
 
 # ❌ BAD - Association (triggers database query)
 config.display_name_for = { "Order" => :customer_email }

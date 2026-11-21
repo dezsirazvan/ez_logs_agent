@@ -71,15 +71,15 @@ module EzLogsAgent
     #
     # Example:
     #   config.display_name_for = {
-    #     "User" => :email,
-    #     "Product" => :name,
-    #     "Order" => :number
+    #     "Employee" => :full_name,
+    #     "Order" => :reference
     #   }
     #
     # IMPORTANT: Only use direct attributes, not associations.
     # Associations will trigger database queries and should be avoided.
     #
-    # If not configured for a model, falls back to: name → title → number → "##{id}"
+    # If not configured for a model, falls back to: name → title → number → label → <model>_number,
+    # else the server shows the record by its short id ("#42", "#b38a…a236")
     attr_accessor :display_name_for
 
     # Default paths excluded from HTTP capture - common Rails noise
