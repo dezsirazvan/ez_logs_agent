@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "set" # Ruby 3.1 doesn't autoload it
+
 module EzLogsAgent
   # Records the calls the app makes to outside services (an HTTP request to Stripe, an email sent
   # through Resend) as `outbound_call` steps of the current action. The server decides what they
@@ -15,12 +17,25 @@ module EzLogsAgent
   # - fails open: nothing here can raise into, hang or retry the app's call.
   module OutboundCapture
     # The server's rules (Summary::OutboundCall, EventIngest::OutboundCalls), so nothing it would drop
-    # ever leaves the app: only API versions and the first segment after them when it is a collection
-    # ("/v1/customers/cus_9x/orders" → "/v1/customers/:id/:id"); a host's registrable domain, never an
-    # address or an internal name.
-    WORD = /\A[a-z][a-z_]{0,19}\z/
-    PLURAL = /[a-z]s\z/
-    NOT_PLURAL = /(?:ss|us|is)\z/
+    # ever leaves the app: only API versions and the first segment after them when it is in
+    # COLLECTIONS ("/v1/customers/cus_9x/orders" → "/v1/customers/:id/:id"); a host's registrable
+    # domain, never an address or an internal name.
+    # The first word after the version is kept only when it is one of these common API collections
+    # ("/v1/charges" → "Created a charge"). Any other word becomes :id, even one that looks plural:
+    # "charles" or "james" could be a person (owner decision, 2026-11-21). Identical in the server,
+    # ez_logs_agent and ezlogs-nextjs (spec/domain/summary/outbound_call_spec.rb checks).
+    COLLECTIONS = %w[
+      accounts activities addresses agents alerts apps assets assistants attachments audiences
+      balances batches bookings calendars calls campaigns cards carts categories channels charges
+      chats checkouts comments companies completions contacts conversations coupons credits
+      customers deals deployments devices discounts disputes documents domains emails embeddings
+      events files forms groups images invoices issues items jobs leads links lists locations logs
+      meetings members messages metrics models notes notifications orders organizations pages
+      payment_intents payment_methods payments payouts people plans posts prices products profiles projects prompts queries records
+      refunds reports requests responses reviews rooms runs sessions shipments sites sources spaces
+      subscribers subscriptions tasks teams templates threads tickets tokens transactions
+      transcriptions transfers translations uploads users videos webhooks workspaces
+    ].to_set.freeze
     VERSION = /\Av\d{1,2}\z/
     SECOND_LEVEL = %w[co com net org gov ac edu ne or].freeze
     PRIVATE_SUFFIXES = %w[local internal localhost lan home intranet corp test example invalid].freeze
@@ -130,7 +145,7 @@ module EzLogsAgent
         kept = segments.map do |segment|
           next segment if first && segment.match?(VERSION)
 
-          keep = first && segment.match?(WORD) && segment.match?(PLURAL) && !segment.match?(NOT_PLURAL)
+          keep = first && COLLECTIONS.include?(segment)
           first = false
           keep ? segment : ":id"
         end

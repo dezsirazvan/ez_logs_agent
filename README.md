@@ -281,7 +281,7 @@ gems) or the `http` gem, and an email ActionMailer delivers (SMTP or an API). Th
 “feedback received” email via resend.com"; a failed one reads in the sentence ("…, but the call to
 slack.com failed").
 
-Sent: the host, the method, the path as a pattern (anything that isn't a plain word becomes `:id`),
+Sent: the host, the method, the path as a pattern (API versions and a first segment from a fixed list of common collection names such as `charges`; everything else becomes `:id`),
 the status and the time; for an email, its mailer and action. Never a body, a query string, a header,
 a recipient or a subject. Nothing is recorded outside a request, job or console line, nor for calls
 to EZLogs itself. Leave a service out with `config.excluded_hosts = ["internal.example.com"]` (its

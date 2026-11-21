@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.9] — 2026-11-21
+
+### Changed
+- **Outside calls keep less of the path.** The first path segment is kept only when it is on a fixed list of about 100 common API collection names (`charges`, `customers`, `messages`, `payment_intents`, …). Before, any lowercase word that looked plural passed, so a name ending in "s" (`/charles`) could leave the app. Anything else is now `:id`, and the action page reads "Called example.com".
+
 ## [0.2.8] — 2026-11-21
 
 ### Added
