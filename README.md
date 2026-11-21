@@ -272,6 +272,26 @@ line or task that ran it.) Rake tasks that run a job worker for the life of the 
 with `config.excluded_rake_tasks`, or turn the whole grouping off with `config.capture_commands = false`.
 Work started on other threads is not grouped.
 
+### 5. Calls to outside services
+
+A call your app makes to another service is a step of the action that made it: an HTTP request
+through Net::HTTP (and so Faraday's default adapter, HTTParty, RestClient, the Stripe and Anthropic
+gems) or the `http` gem, and an email ActionMailer delivers (SMTP or an API). The action page shows
+"Created a checkout session at stripe.com · POST /v1/checkout/sessions · 200" or "Sent the
+“feedback received” email via resend.com"; a failed one reads in the sentence ("…, but the call to
+slack.com failed").
+
+Sent: the host, the method, the path as a pattern (anything that isn't a plain word becomes `:id`),
+the status and the time; for an email, its mailer and action. Never a body, a query string, a header,
+a recipient or a subject. Nothing is recorded outside a request, job or console line, nor for calls
+to EZLogs itself. Leave a service out with `config.excluded_hosts = ["internal.example.com"]` (its
+subdomains too), or stop recording calls with `config.capture_outbound = false`.
+
+It never slows or blocks the call: the agent reads the clock before and after, and keeps a small
+record that its own thread turns into an event later. Measured on a local kept-alive connection:
+about 3 µs per call over the correlation header the agent already adds. The response body is never
+read, and the app's error is re-raised untouched.
+
 ---
 
 ## How Correlation Works
@@ -352,6 +372,13 @@ EzLogsAgent.configure do |config|
   # RestClient) and the `http` gem, so another service running an EZLogs agent joins the same
   # action. Incoming calls adopt it only in the agents' own format. Default: true
   config.propagate_correlation = true
+
+  # Record calls to outside services as steps of the action (see "Calls to outside services").
+  # Default: true
+  config.capture_outbound = true
+
+  # Hosts never recorded, with their subdomains. Default: []
+  config.excluded_hosts = []
 
   # ==========================================
   # Exclusion Lists

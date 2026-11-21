@@ -35,11 +35,13 @@ module EzLogsAgent
       # Flush all buffered events and clear buffer atomically.
       # @return [Array<Hash>] Array of events (empty if buffer was empty)
       def flush
-        @monitor.synchronize do
-          events = @queue.dup
+        events = @monitor.synchronize do
+          taken = @queue.dup
           @queue.clear
-          events
+          taken
         end
+        # A measured outside call becomes its event here, off the app's call (OutboundCapture).
+        events.filter_map { |e| e.respond_to?(:to_event) ? e.to_event : e }
       rescue => error
         log_error("[Buffer] flush failed: #{error.message}")
         []

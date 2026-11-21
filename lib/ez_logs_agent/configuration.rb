@@ -21,6 +21,10 @@ module EzLogsAgent
   # === Background Jobs (capturers/job_capturer.rb)
   # - excluded_job_classes: Job class names to ignore (health checks, etc.)
   #
+  # === Calls to outside services (outbound_capture.rb)
+  # - capture_outbound: false stops recording them (the X-Correlation-ID header is propagate_correlation)
+  # - excluded_hosts: hosts never recorded, with their subdomains ("internal.example.com")
+  #
   # === Console, rake, runner (command.rb)
   # - capture_commands: false turns the grouping off (their writes are sent as before 0.2.6)
   # - excluded_rake_tasks: rake tasks not grouped into one action (job workers run as rake tasks)
@@ -44,6 +48,8 @@ module EzLogsAgent
     # Stamp X-Correlation-ID on outgoing Net::HTTP calls so another service
     # running an EZLogs agent joins the same action (default true).
     attr_accessor :propagate_correlation
+    attr_accessor :capture_outbound
+    attr_accessor :excluded_hosts
     attr_accessor :excluded_paths
     attr_accessor :excluded_tables
     attr_accessor :excluded_job_classes
@@ -179,6 +185,8 @@ module EzLogsAgent
       @capture_commands = true             # console lines, rake tasks, runner scripts as actions (command.rb)
       @capture_database = true
       @propagate_correlation = true
+      @capture_outbound = true             # calls to outside services as steps (outbound_capture.rb)
+      @excluded_hosts = []                 # hosts (and their subdomains) never recorded
       @excluded_paths = []                 # User-defined; combined with DEFAULT_EXCLUDED_PATHS
       @excluded_tables = []                # User-defined; combined with DEFAULT_EXCLUDED_TABLES
       @excluded_job_classes = []           # User-defined; combined with DEFAULT_EXCLUDED_JOB_CLASSES

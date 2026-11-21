@@ -74,6 +74,14 @@ module EzLogsAgent
         errors << "capture_jobs must be true or false (got: #{config.capture_jobs})"
       end
 
+      unless [true, false].include?(config.capture_outbound)
+        errors << "capture_outbound must be true or false (got: #{config.capture_outbound})"
+      end
+
+      if config.excluded_hosts && !config.excluded_hosts.is_a?(Array)
+        errors << "excluded_hosts must be an array (got: #{config.excluded_hosts.class})"
+      end
+
       unless [true, false].include?(config.capture_commands)
         errors << "capture_commands must be true or false (got: #{config.capture_commands})"
       end

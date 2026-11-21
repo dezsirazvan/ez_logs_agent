@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.8] — 2026-11-21
+
+### Added
+- **Calls to outside services show up.** An HTTP call your app makes (Net::HTTP, so Faraday's default adapter, HTTParty, RestClient, the Stripe and Anthropic gems; and the `http` gem) and an email ActionMailer delivers (SMTP or an API) are recorded as steps of the action that made them, named on the action page ("Created a checkout session at stripe.com", "Sent the “feedback received” email via resend.com"). A failed one ("…, but the call to slack.com failed") makes the action partly failed and gives its reason.
+  - Sent: host, method, the path as a pattern (anything that isn't a plain word becomes `:id`), status and time; for an email, its mailer and action. Never a body, a query string, a header, a recipient or a subject.
+  - Never outside a request, job or console line, never to EZLogs itself. At most 50 calls per action.
+  - New options: `config.capture_outbound` (default `true`) and `config.excluded_hosts` (default `[]`).
+  - Cost, measured: about 3 µs per call over the correlation header the agent already adds (local kept-alive connection, median of 10,000 calls; memory constant). The call's response body is never read and its error is re-raised untouched. A streamed response is timed to its headers.
+- Needs the EZLogs server from 2026-11-21, which accepts `outbound_call` events.
+
+### Changed
+- `config.propagate_correlation = false` now only stops the `X-Correlation-ID` header; the hook stays installed while `capture_outbound` is on.
+
 ## [0.2.7] — 2026-11-19
 
 ### Changed

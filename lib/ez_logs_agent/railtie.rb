@@ -227,7 +227,10 @@ module EzLogsAgent
     # X-Correlation-ID stamp (cross-service actions). Both fail open.
     def self.install_http_helpers
       EzLogsAgent::RenderedTemplate.install if EzLogsAgent.configuration.capture_http
-      EzLogsAgent::OutgoingHttp.install unless EzLogsAgent.configuration.propagate_correlation == false
+      config = EzLogsAgent.configuration
+      # One prepend serves both: the header (propagate_correlation) and the recording (capture_outbound).
+      EzLogsAgent::OutgoingHttp.install if config.propagate_correlation != false || config.capture_outbound != false
+      EzLogsAgent::OutboundCapture.install_mail if config.capture_outbound != false
     rescue StandardError => e
       EzLogsAgent::Logger.error("[Railtie] Failed to install HTTP helpers: #{e.class} - #{e.message}")
     end
