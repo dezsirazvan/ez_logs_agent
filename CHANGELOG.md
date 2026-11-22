@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.17] — 2026-11-22
+
+### Fixed
+- **No project token, nothing in the way.** With an invalid configuration (most often no `EZLOGS_PROJECT_TOKEN` in development or test), jobs and database capture were already skipped, but the HTTP middleware still captured every request into a buffer that nothing sent: it filled to 10,000 events in memory and logged "Buffer full" on every request. The middleware now only passes requests through until the configuration is valid.
+
 ## [0.2.16] — 2026-11-22
 
 ### Added

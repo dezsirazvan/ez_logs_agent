@@ -173,8 +173,10 @@ module EzLogsAgent
 
       # Check if HTTP capture is enabled
       # @return [Boolean]
+      # Off when the Railtie found the configuration invalid (EzLogsAgent.active?): the request only
+      # passes through, nothing is buffered or logged.
       def capture_enabled?
-        EzLogsAgent.configuration.capture_http
+        EzLogsAgent.active? && EzLogsAgent.configuration.capture_http
       rescue
         false # Defensive: assume disabled if config unavailable
       end

@@ -38,6 +38,15 @@ module EzLogsAgent
   class Error < StandardError; end
 
   class << self
+    # False once the Railtie found the configuration invalid (no project token, a bad server URL):
+    # then the HTTP middleware only passes requests through, as jobs and database capture are
+    # never installed. Nothing is captured, buffered or logged per request. True by default.
+    attr_writer :active
+
+    def active?
+      @active != false
+    end
+
     attr_writer :configuration
 
     def configuration

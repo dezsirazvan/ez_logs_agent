@@ -80,6 +80,7 @@ module EzLogsAgent
       # Validate configuration before doing anything
       validation_result = validate_configuration
       announce_startup(validation_result)
+      EzLogsAgent.active = validation_result ? true : false
       next unless validation_result
 
       # Register Sidekiq middleware
