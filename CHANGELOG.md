@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.12] — 2026-11-22
+
+### Fixed
+- **A write the app refused with an alert reads as refused, not done.** A POST, PUT, PATCH or DELETE that redirects, wrote no row and leaves `flash[:alert]` or `flash[:error]` for the next page (the Rails and Devise convention for "that didn't work": a refund not issued, a review rejected) is now a failure, with the alert's text (up to 200 characters) as its reason. Only an alert set by that request counts, never one carried over from the page before; a notice, a write that saved rows, a GET or a non-redirect stay successes. The flash is only read, never changed. A write made only through raw SQL (`connection.execute`) or in another thread isn't seen as a write, so such a request with an alert reads as refused.
+
 ## [0.2.11] — 2026-11-21
 
 ### Fixed

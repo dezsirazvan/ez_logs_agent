@@ -183,6 +183,13 @@ module EzLogsAgent
         end
 
         # record.delete: no callbacks run.
+        # A write that skipped callbacks still wrote a row (refused_redirect reads this). Never raises.
+        def note_write
+          ::EzLogsAgent::RenderedTemplate.wrote_rows!
+        rescue StandardError
+          nil
+        end
+
         def handle_delete(model)
           return unless capture_enabled?
 
@@ -572,6 +579,7 @@ module EzLogsAgent
           before = {}
         end
         result = super
+        DatabaseCapturer.note_write if result
         DatabaseCapturer.handle_columns_update(self, before) if result && before.any?
         result
       end
@@ -579,6 +587,7 @@ module EzLogsAgent
       def delete
         was_persisted = persisted?
         result = super
+        DatabaseCapturer.note_write if was_persisted && destroyed?
         DatabaseCapturer.handle_delete(self) if was_persisted && destroyed?
         result
       end

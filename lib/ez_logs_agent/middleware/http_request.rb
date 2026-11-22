@@ -200,6 +200,7 @@ module EzLogsAgent
         duration_ms = current_time_ms - start_time
         outcome, error_message = determine_outcome(status, exception, graphql_response_errors)
         outcome, error_message = refused_form(env, status, outcome, error_message)
+        outcome, error_message = refused_redirect(env, status, outcome, error_message)
 
         # Convert start_time (ms) to Time object for EventBuilder
         # This ensures events are timestamped at START, not completion
@@ -1045,6 +1046,35 @@ module EzLogsAgent
         ["failure", "Not saved: the form was shown again"]
       rescue => e
         log_error("refused_form failed: #{e.message}")
+        [outcome, error_message]
+      end
+
+      # A write that redirects, wrote no row and leaves an alert for the next page (`flash[:alert]` or
+      # `flash[:error]`, the Rails and Devise convention for "that didn't work") was refused: a refund
+      # not issued, a review rejected. Only a flash set by this request counts (one carried over from
+      # the last request is being discarded); `flash.now` never survives a redirect. Read-only: the
+      # flash is read, never changed. Its text is the reason.
+      FAILURE_FLASH_KEYS = %w[alert error].freeze
+      MAX_FLASH_REASON = 200
+      WRITE_REQUEST_METHODS = %w[POST PUT PATCH DELETE].freeze
+
+      def refused_redirect(env, status, outcome, error_message)
+        return [outcome, error_message] unless outcome == "success" && status.to_i.between?(300, 399)
+        return [outcome, error_message] unless EzLogsAgent.configuration.capture_database
+        return [outcome, error_message] unless WRITE_REQUEST_METHODS.include?(env["REQUEST_METHOD"])
+        return [outcome, error_message] if EzLogsAgent::RenderedTemplate.wrote_rows?
+
+        flash = env["action_dispatch.request.flash_hash"]
+        kept = flash.respond_to?(:to_session_value) && flash.to_session_value
+        flashes = kept.is_a?(Hash) ? kept["flashes"] : nil
+        return [outcome, error_message] unless flashes.is_a?(Hash)
+
+        reason = FAILURE_FLASH_KEYS.lazy.map { |key| flashes[key] }.find { |text| text.is_a?(String) && !text.strip.empty? }
+        return [outcome, error_message] unless reason
+
+        ["failure", reason.strip[0, MAX_FLASH_REASON]]
+      rescue => e
+        log_error("refused_redirect failed: #{e.message}")
         [outcome, error_message]
       end
 
