@@ -237,6 +237,10 @@ module EzLogsAgent
     def self.install_sign_out_actor
       return unless defined?(::Warden::Manager) && ::Warden::Manager.respond_to?(:before_logout)
 
+      # A successful sign-in (never a session fetch): the proof a sign-in route signed someone in.
+      ::Warden::Manager.after_authentication do |_user, _auth, _opts|
+        EzLogsAgent::Middleware::HttpRequest.note_signed_in
+      end
       ::Warden::Manager.before_logout do |user, auth, opts|
         env = auth.respond_to?(:env) ? auth.env : nil
         default_scope = auth.respond_to?(:config) ? auth.config[:default_scope] : nil

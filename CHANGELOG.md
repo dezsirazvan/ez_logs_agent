@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.16] — 2026-11-22
+
+### Added
+- **A successful sign-in reads "Signed in" (Devise / Warden).** Warden's `after_authentication` (a strategy or the app's `sign_in` authenticated someone; never a session fetch) marks the request, sent as `signed_in: true` (an optional field). EZLogs takes it as proof, so an app without Devise `trackable` and without a session table no longer reads "Submitted sign-in". Only a flag is set: nothing runs, nothing is added to the request's time.
+
 ## [0.2.15] — 2026-11-22
 
 ### Fixed

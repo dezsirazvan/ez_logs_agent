@@ -24,6 +24,17 @@ module EzLogsAgent
       # the app's actor hook then finds no one. Never raises; never changes the sign-out.
       SIGNED_OUT_KEY = :ezlogs_signed_out_user
 
+      # Warden's after_authentication (Railtie): a sign-in succeeded in this request (a strategy or the
+      # app's sign_in authenticated someone). Sent as source_data signed_in: true, the proof EZLogs needs
+      # to read a sign-in route as "Signed in" (Devise without trackable writes no row that proves it).
+      SIGNED_IN_KEY = :ezlogs_signed_in
+
+      def self.note_signed_in
+        RequestStore.store[SIGNED_IN_KEY] = true if EzLogsAgent::Correlation.current
+      rescue StandardError
+        nil
+      end
+
       # Only a sign-out the person asked for: a sessions controller's destroy, or a sign-out / log-out
       # route. A logout Warden forces inside another request (an expired session, a locked account)
       # is no one's sign-out action, so it names no one.
@@ -336,6 +347,7 @@ module EzLogsAgent
           base_data[:request_params] = rest_params if rest_params
         end
 
+        base_data[:signed_in] = true if defined?(RequestStore) && RequestStore.store[SIGNED_IN_KEY]
         base_data.compact # Remove nil values
       rescue => e
         log_error("extract_source_data failed: #{e.message}")
@@ -1003,6 +1015,7 @@ module EzLogsAgent
       # @return [void]
       def clear_actor
         RequestStore.store.delete(SIGNED_OUT_KEY) if defined?(RequestStore)
+        RequestStore.store.delete(SIGNED_IN_KEY) if defined?(RequestStore)
         EzLogsAgent::Actor.clear
       rescue => e
         log_error("clear_actor failed: #{e.message}")
