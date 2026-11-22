@@ -51,9 +51,12 @@ module EzLogsAgent
             # 1. correlation_id is present and not empty
             # 2. job doesn't already have one
             # (A console line's or rake task's own id is not carried: its jobs are their own actions.)
-            if correlation_id && correlation_id.respond_to?(:empty?) && !correlation_id.empty? && !job.key?("correlation_id") &&
-               !EzLogsAgent::Command.owns?(correlation_id)
-              job["correlation_id"] = correlation_id
+            usable = correlation_id && correlation_id.respond_to?(:empty?) && !correlation_id.empty? &&
+                     !EzLogsAgent::Command.owns?(correlation_id)
+            unless job.key?("correlation_id")
+              # Outside any action (a console, a task, a scheduler) the job gets its own id now, in its
+              # payload: Sidekiq retries that same payload, so every attempt is one action.
+              job["correlation_id"] = usable ? correlation_id : EzLogsAgent::Correlation.generate
             end
           rescue StandardError => e
             # Never crash the host application during correlation injection
@@ -128,9 +131,6 @@ module EzLogsAgent
           correlation_id = (enqueued_by if enqueued_by && EzLogsAgent::Correlation.recent_for_job?(enqueued_by)) ||
                            EzLogsAgent::Correlation.generate
           EzLogsAgent::Correlation.current = correlation_id
-          # Sidekiq retries push this same job hash again: a retry joins the first run's action (one
-          # failed job, not one action per attempt), as a job enqueued in a request already does.
-          job["correlation_id"] = correlation_id if job.is_a?(Hash) && enqueued_by != correlation_id
 
           # Measure execution time
           start_time = Time.now

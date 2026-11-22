@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.15] — 2026-11-22
+
+### Fixed
+- **A Sidekiq job's retries stay one action, for real.** 0.2.14 kept the id in the running job's hash, but Sidekiq retries the job from its original JSON, so the id was lost. A job enqueued outside any action (a console, a task, a scheduler) now gets its own correlation id when it is enqueued, in its payload, which every retry carries. A job enqueued in a request still joins that request's action; a console line's or task's own id is still never carried.
+
 ## [0.2.14] — 2026-11-22
 
 ### Fixed
