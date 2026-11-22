@@ -78,9 +78,10 @@ module EzLogsAgent
       # Validate conditional rules
       validate_outcome_error_consistency!(validated_outcome, error_message)
 
-      # Sanitize sensitive data
-      sanitized_source_data = sanitize_hash(validated_source_data)
-      sanitized_context = validated_context.nil? ? nil : sanitize_hash(validated_context)
+      # Sanitize sensitive data, then cut long strings (a long text column, a raw email): one event
+      # can never make a batch too large to send.
+      sanitized_source_data = cap_strings(sanitize_hash(validated_source_data))
+      sanitized_context = validated_context.nil? ? nil : cap_strings(sanitize_hash(validated_context))
 
       # Build and return Event hash
       {
@@ -94,6 +95,26 @@ module EzLogsAgent
         duration_ms: validated_duration_ms,
         error_message: error_message
       }
+    end
+
+    MAX_STRING = 4_096
+
+    # Strings over 4 KB keep their start and say how long they were; nested values bounded by depth.
+    def self.cap_strings(value, depth = 0)
+      case value
+      when String
+        value.length > MAX_STRING ? "#{value[0, MAX_STRING]}… [#{value.length} characters]" : value
+      when Hash
+        return value if depth > 8
+
+        value.transform_values { |v| cap_strings(v, depth + 1) }
+      when Array
+        return value if depth > 8
+
+        value.map { |v| cap_strings(v, depth + 1) }
+      else
+        value
+      end
     end
 
     # Validates source_type field

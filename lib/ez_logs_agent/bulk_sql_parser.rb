@@ -51,6 +51,12 @@ module EzLogsAgent
     # The order of placeholders in the SQL corresponds 1:1 with the order
     # of values in `binds` / `type_casted_binds`.
     PLACEHOLDER = /(?:\$\d+|\?)/.freeze
+    # A SQL string literal: 'it''s', and MySQL's 'O\'Brien' (a PostgreSQL literal ending in a
+    # backslash is rare and reads as longer: more is masked, never less). Literals are swapped for
+    # tokens before anything else, so a keyword, comma, "?" or "$1" inside one never splits the SQL.
+    SQL_STRING_LITERAL = /'(?:[^'\\]|\\.|'')*'/m.freeze
+    LITERAL_TOKEN = /'\u0001(\d+)'/.freeze
+    LITERAL_MASK = "'[redacted]'"
 
     module_function
 
@@ -67,9 +73,10 @@ module EzLogsAgent
 
       case sql_stripped
       when /\ADELETE FROM /i
-        parse_delete(sql_stripped, type_casted_binds || [])
+        parse_delete(tokenize_literals(sql_stripped, []), type_casted_binds || [])
       when /\AUPDATE /i
-        parse_update(sql_stripped, type_casted_binds || [])
+        literals = []
+        parse_update(tokenize_literals(sql_stripped, literals), type_casted_binds || [], literals)
       when /\AINSERT INTO /i
         parse_insert(sql_stripped)
       else
@@ -82,6 +89,14 @@ module EzLogsAgent
       # defending here means the rest of the capturer sees a uniform
       # return shape.
       { unparseable: true }
+    end
+
+    # The statement with each string literal swapped for "'\u0001N'" (N its index in `literals`).
+    def tokenize_literals(sql, literals)
+      sql.gsub(SQL_STRING_LITERAL) do
+        literals << Regexp.last_match(0)
+        "'\u0001#{literals.size - 1}'"
+      end
     end
 
     # Strip Rails 7+ Query Log Tags (`/*application='X',action='Y'*/`)
@@ -134,7 +149,7 @@ module EzLogsAgent
 
     # --- UPDATE "orders" SET "status" = $1 WHERE "orders"."status" = $2 ---
     # SET binds come first in placeholder order, then WHERE binds.
-    def parse_update(sql, type_casted_binds)
+    def parse_update(sql, type_casted_binds, literals = [])
       set_sql = extract_set(sql)
       where_sql = extract_where(sql)
       return { unparseable: true } if set_sql.nil?
@@ -143,7 +158,7 @@ module EzLogsAgent
       set_binds = type_casted_binds.first(set_bind_count)
       where_binds_raw = type_casted_binds.drop(set_bind_count)
 
-      set_hash = zip_set_values(set_pairs, set_binds)
+      set_hash = zip_set_values(set_pairs, set_binds, literals)
       where_template, where_binds = build_template_and_binds(where_sql, where_binds_raw)
 
       {
@@ -203,15 +218,18 @@ module EzLogsAgent
     # Walks set_pairs in order, taking the next bind for each placeholder
     # RHS and pulling the literal text for non-placeholder RHS (e.g.,
     # `updated_at = '2026-06-05 12:00:00'`).
-    def zip_set_values(set_pairs, set_binds)
+    def zip_set_values(set_pairs, set_binds, literals = [])
       bind_idx = 0
       set_pairs.each_with_object({}) do |(col, rhs), acc|
         if rhs.match?(PLACEHOLDER)
           acc[col] = set_binds[bind_idx]
           bind_idx += 1
         else
-          # Strip surrounding quotes to surface the actual value.
-          acc[col] = rhs.gsub(/\A['"]|['"]\z/, "")
+          # A literal is a change like a bind (masked by column downstream): its text, unquoted.
+          token = rhs.match(/\A#{LITERAL_TOKEN.source}\z/)
+          rhs = literals[token[1].to_i].to_s[1...-1].gsub(/''|\\(['\\])/) { Regexp.last_match(1) || "'" } if token
+          # An expression (COALESCE(x, '…')) keeps its shape; a literal inside it has no column of its own.
+          acc[col] = token ? rhs : rhs.gsub(LITERAL_TOKEN, LITERAL_MASK).gsub(/\A['"]|['"]\z/, "")
         end
       end
     end
@@ -263,7 +281,9 @@ module EzLogsAgent
     def build_template_and_binds(where_sql, type_casted_binds)
       return [nil, []] if where_sql.nil?
 
-      template = where_sql
+      # A value written into the filter (where("email = 'ana@x.com'"), or a `?` Rails inlined) has
+      # no column to be masked by: every string literal (a token by now, see #parse) is masked.
+      template = where_sql.gsub(LITERAL_TOKEN, LITERAL_MASK)
       binds = []
       bind_index = 0
 

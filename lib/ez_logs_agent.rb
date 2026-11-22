@@ -25,8 +25,11 @@ require_relative "ez_logs_agent/flush_scheduler"
 require_relative "ez_logs_agent/middleware/http_request"
 require_relative "ez_logs_agent/capturers/job_capturer"
 require_relative "ez_logs_agent/capturers/active_job_capturer"
+require_relative "ez_logs_agent/transactional"
+require_relative "ez_logs_agent/tenant"
 require_relative "ez_logs_agent/capturers/database_capturer"
 require_relative "ez_logs_agent/capturers/bulk_database_capturer"
+require_relative "ez_logs_agent/capturers/action_cable_capturer"
 
 # Load Railtie only when Rails is present
 require_relative "ez_logs_agent/railtie" if defined?(Rails::Railtie)

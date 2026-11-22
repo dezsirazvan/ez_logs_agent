@@ -91,6 +91,9 @@ module EzLogsAgent
       # Install Database capturer
       install_database_capturer
 
+      # Action Cable channel actions: one action each, by the connection's person
+      EzLogsAgent::Capturers::ActionCableCapturer.install
+
       # Refused-form detection and cross-service correlation (HTTP capture)
       install_http_helpers
 

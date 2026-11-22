@@ -112,6 +112,7 @@ module EzLogsAgent
               after_update { |model| EzLogsAgent::Capturers::DatabaseCapturer.handle_update(model) }
               after_destroy { |model| EzLogsAgent::Capturers::DatabaseCapturer.handle_destroy(model) }
             end
+            ActiveRecord::Base.prepend(SkippedCallbacks)
             @callbacks_registered = true
           end
 
@@ -162,7 +163,50 @@ module EzLogsAgent
           EzLogsAgent::Logger.error("[DatabaseCapturer] handle_destroy failed: #{e.class} - #{e.message}")
         end
 
+        # update_columns / update_column: no callbacks run, so the change is built from the values
+        # before and after. Sent when the transaction commits (Rails 7.2+), else at once.
+        def handle_columns_update(model, before)
+          return unless capture_enabled?
+
+          changes = before.each_with_object({}) do |(attribute, from), acc|
+            to = model[attribute]
+            acc[attribute] = [from, to] unless from == to
+          end
+          meaningful = filter_meaningful_changes(changes, model)
+          return if meaningful.empty?
+
+          context = build_change_context(meaningful)
+          context[:display_name] = resolve_display_name(model)
+          capture_outside_callbacks(model, "update", context.compact)
+        rescue StandardError => e
+          EzLogsAgent::Logger.error("[DatabaseCapturer] handle_columns_update failed: #{e.class} - #{e.message}")
+        end
+
+        # record.delete: no callbacks run.
+        def handle_delete(model)
+          return unless capture_enabled?
+
+          capture_outside_callbacks(model, "destroy", { display_name: resolve_display_name(model) }.compact)
+        rescue StandardError => e
+          EzLogsAgent::Logger.error("[DatabaseCapturer] handle_delete failed: #{e.class} - #{e.message}")
+        end
+
         private
+
+        def capture_outside_callbacks(model, operation, context)
+          return if table_excluded?(model)
+
+          event = EzLogsAgent::EventBuilder.build(
+            source_type: :database_callback,
+            source_data: { model_class: model.class.name, operation: operation },
+            outcome: :success,
+            correlation_id: EzLogsAgent::Command.correlation,
+            resource_ids: extract_resource_ids(model),
+            context: EzLogsAgent::Command.with_actor(context.presence),
+            duration_ms: nil
+          )
+          EzLogsAgent::Transactional.push_for(model.class, event)
+        end
 
         # Checks if database capture is enabled. Reads the memoized
         # value set at install time (no config-object dispatch on the
@@ -209,7 +253,7 @@ module EzLogsAgent
             duration_ms: nil
           )
 
-          EzLogsAgent::Buffer.push(event)
+          EzLogsAgent::Transactional.push_for(model.class, event)
         rescue StandardError => e
           EzLogsAgent::Logger.error("[DatabaseCapturer] capture_event failed: #{e.class} - #{e.message}")
         end
@@ -222,7 +266,7 @@ module EzLogsAgent
           [
             {
               resource_type: model.class.name,
-              resource_id: model.id.to_s
+              resource_id: EzLogsAgent::Tenant.qualified_id(model)
             }
           ]
         rescue StandardError
@@ -506,6 +550,37 @@ module EzLogsAgent
             value
           end
         end
+      end
+    end
+  end
+end
+
+module EzLogsAgent
+  module Capturers
+    # The writes that skip Active Record callbacks: update_columns (and update_column, which calls
+    # it) and delete. Recorded after they succeed; never changes what they do or return.
+    module SkippedCallbacks
+      def update_columns(attributes)
+        before = {}
+        begin
+          attributes.each_key do |name|
+            column = name.to_s
+            column = self.class.attribute_aliases[column] || column
+            before[column] = self[column] if has_attribute?(column)
+          end
+        rescue StandardError
+          before = {}
+        end
+        result = super
+        DatabaseCapturer.handle_columns_update(self, before) if result && before.any?
+        result
+      end
+
+      def delete
+        was_persisted = persisted?
+        result = super
+        DatabaseCapturer.handle_delete(self) if was_persisted && destroyed?
+        result
       end
     end
   end

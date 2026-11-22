@@ -53,7 +53,7 @@ EzLogsAgent.configure do |config|
   # config.excluded_tables = ["audit_logs", "versions"]
 
   # Additional job classes to exclude from background job capture (added to built-in defaults)
-  # Built-in: SidekiqAlive::Worker, SolidQueue::CleanupJob, SolidQueue::RecurringJob
+  # Built-in: SidekiqAlive::Worker, SolidQueue::CleanupJob
   # config.excluded_job_classes = ["MyApp::HealthCheckJob", "MyApp::MetricsJob"]
 
   # Each console line, rake task and runner script that changes data reads as one action

@@ -36,6 +36,18 @@ module EzLogsAgent
       age <= INBOUND_MAX_AGE_MS && age >= -INBOUND_MAX_SKEW_MS
     end
 
+    # A job joins the action that enqueued it only while that action is recent (an hour): a job
+    # delayed by days, or a retry days later, is its own action, never one dated days earlier and
+    # done by whoever clicked then. Ids not in our format carry no time: kept.
+    JOB_MAX_AGE_MS = 60 * 60_000
+
+    def self.recent_for_job?(id)
+      match = INBOUND_ID.match(id.to_s)
+      return true unless match
+
+      (Time.now.to_f * 1000).to_i - match[1].to_i <= JOB_MAX_AGE_MS
+    end
+
     # The request's correlation id: the calling service's when trusted, else new.
     def self.for_request(env)
       inbound = env[HEADER_ENV]

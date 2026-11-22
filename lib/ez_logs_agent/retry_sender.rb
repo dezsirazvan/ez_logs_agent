@@ -40,6 +40,7 @@ module EzLogsAgent
         while attempt <= max_attempts
           result = attempt_send(events, attempt, max_attempts)
           return :success if result == :success
+          return :failure if result == :rejected # sending the same batch again can't succeed
 
           # If this was the last attempt, return failure
           break if attempt >= max_attempts

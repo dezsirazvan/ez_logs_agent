@@ -27,7 +27,8 @@ module EzLogsAgent
       #
       # @param events [Array<Hash>] Array of event hashes
       # @param timeout [Numeric, nil] open/read/write timeout override (seconds)
-      # @return [Symbol] :success if 2xx response, :failure otherwise
+      # @return [Symbol] :success if 2xx, :rejected for a refusal that can't succeed on retry (4xx
+      #   other than 408 and 429), :failure otherwise
       def send(events, timeout: nil)
         return :success if events.nil? || events.empty?
 
@@ -36,6 +37,29 @@ module EzLogsAgent
       rescue => error
         Logger.error("[Transport] send failed: #{error.class} - #{error.message}")
         :failure
+      end
+
+      MAX_BATCH_BYTES = 1_000_000
+
+      # Events split into posts of at most about 1 MB (the server refuses a post over 5 MB, and with it
+      # every event inside): a busy moment sends several posts, never one refused whole.
+      def batches(events)
+        return [] if events.nil? || events.empty?
+
+        result = [[]]
+        size = 0
+        events.each do |event|
+          bytes = JSON.generate(event).bytesize
+          if size + bytes > MAX_BATCH_BYTES && result.last.any?
+            result << []
+            size = 0
+          end
+          result.last << event
+          size += bytes + 1
+        end
+        result
+      rescue StandardError
+        [events]
       end
 
       private
@@ -83,6 +107,9 @@ module EzLogsAgent
         if status >= 200 && status < 300
           Logger.debug("[Transport] send succeeded (#{status})")
           :success
+        elsif status >= 400 && status < 500 && ![408, 429].include?(status)
+          Logger.error("[Transport] send refused (#{status}), not retried")
+          :rejected
         else
           Logger.error("[Transport] send failed (#{status})")
           :failure

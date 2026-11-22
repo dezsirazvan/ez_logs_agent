@@ -118,11 +118,15 @@ module EzLogsAgent
           # Match against the underlying ActiveJob class too, not just the wrapper.
           if excluded_job_class?(worker, job)
             EzLogsAgent::Logger.debug("[JobCapturer::ServerMiddleware] Skipping capture (excluded job class: #{resolve_job_class(worker, job)})")
-            return yield
+            # Nothing it writes is sent either (as an excluded path): never shown, it would only be stored.
+            return EzLogsAgent::Correlation.excluding { yield }
           end
 
-          # Restore correlation_id from job payload (or generate new one)
-          correlation_id = job["correlation_id"] || EzLogsAgent::Correlation.generate
+          # Restore correlation_id from job payload (or generate new one); a job run more than an hour
+          # after its action started is its own action (Correlation.recent_for_job?)
+          enqueued_by = job["correlation_id"]
+          correlation_id = (enqueued_by if enqueued_by && EzLogsAgent::Correlation.recent_for_job?(enqueued_by)) ||
+                           EzLogsAgent::Correlation.generate
           EzLogsAgent::Correlation.current = correlation_id
 
           # Measure execution time

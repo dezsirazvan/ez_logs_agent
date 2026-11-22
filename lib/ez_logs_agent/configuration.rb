@@ -101,14 +101,16 @@ module EzLogsAgent
       "/cable*",                 # ActionCable WebSocket connections
       "/sidekiq",                # Sidekiq Web UI dashboard root (the conventional mount)
       "/sidekiq/*",              # Sidekiq Web UI sub-paths (auto-poll noise)
-      # Authentication pages - not meaningful business actions
-      # Use */path* patterns to match auth routes anywhere (e.g., /admin/logout)
-      "*/sign_in*",              # Devise and common sign in (matches /users/sign_in, /admin/sign_in)
-      "*/sign_out*",             # Devise and common sign out
-      "*/login*",                # Common auth pattern (matches /login, /admin/login)
-      "*/logout*",               # Common auth pattern (matches /logout, /admin/logout)
-      "/users/password*",        # Devise password reset/edit
-      "/session*"                # Common auth pattern
+    ].freeze
+
+    # Sign-in, sign-out and password pages: only loading them (GET, HEAD) is left out. Signing in or
+    # out, and resetting a password, are recorded like any action (the same as ezlogs-nextjs).
+    # Whole path segments only, so /sessions/42/book or /admin/users/5/login_as stay recorded.
+    DEFAULT_EXCLUDED_AUTH_PAGES = [
+      "*/sign_in", "*/sign_in/*", "*/sign_out", "*/sign_out/*",
+      "*/login", "*/login/*", "*/logout", "*/logout/*",
+      "/users/password", "/users/password/*",
+      "/session", "/session/*"
     ].freeze
 
     # Default file extensions excluded from HTTP capture - static assets
@@ -146,8 +148,9 @@ module EzLogsAgent
     # Default job classes excluded from background job capture - infrastructure/health check jobs
     DEFAULT_EXCLUDED_JOB_CLASSES = [
       "SidekiqAlive::Worker",             # Sidekiq health check
-      "SolidQueue::CleanupJob",           # SolidQueue maintenance
-      "SolidQueue::RecurringJob"          # SolidQueue scheduler internals
+      "SolidQueue::CleanupJob"            # SolidQueue maintenance
+      # SolidQueue::RecurringJob is captured: it runs a recurring task given as a `command:` (the
+      # app's own code), whose writes would otherwise have no action.
     ].freeze
 
     # Rake tasks that run a job worker for the life of the process: grouped as one command, every

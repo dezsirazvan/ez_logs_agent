@@ -40,8 +40,21 @@ module EzLogsAgent
         graphql_response_errors = nil
 
         begin
-          # Call downstream app
-          status, headers, body = @app.call(env)
+          # Call downstream app. Devise / Warden stop a request that needs a sign-in with
+          # `throw :warden` (caught by Warden outside this middleware): caught here only to note it,
+          # then thrown on with the same value, so the app behaves exactly the same.
+          finished = false
+          headers = body = nil
+          thrown = catch(:warden) do
+            status, headers, body = @app.call(env)
+            finished = true
+            nil
+          end
+          unless finished
+            status = 401
+            exception = :sign_in_required
+            throw :warden, thrown
+          end
 
           # SAFETY CRITICAL: We NEVER touch, modify, reassign, or interfere with
           # the response body in any way. The body variable flows through untouched.
@@ -58,8 +71,9 @@ module EzLogsAgent
           end
 
           [status, headers, body]
-        rescue => e
-          # Capture exception but re-raise after
+        rescue Exception => e # rubocop:disable Lint/RescueException
+          # Capture exception but re-raise after: any exception, also one outside StandardError
+          # (Rack::Timeout's), so a request that never finished is never recorded as a success.
           exception = e
           raise
         ensure
@@ -77,6 +91,14 @@ module EzLogsAgent
       end
 
       private
+
+      # A prefetch or prerender: Turbo sends X-Sec-Purpose (a page's fetch can't set Sec-Purpose),
+      # browsers Sec-Purpose or Purpose. Only reads: a write is never speculative.
+      SPECULATIVE = /prefetch|prerender/i
+      def speculative?(env)
+        %w[GET HEAD].include?(env["REQUEST_METHOD"]) &&
+          [env["HTTP_SEC_PURPOSE"], env["HTTP_X_SEC_PURPOSE"], env["HTTP_PURPOSE"], env["HTTP_X_PURPOSE"]].any? { |v| v.to_s.match?(SPECULATIVE) }
+      end
 
       # Determine if request should be captured
       # @param env [Hash] Rack environment
@@ -109,6 +131,8 @@ module EzLogsAgent
         # Check path patterns first
         all_excluded = EzLogsAgent.configuration.all_excluded_paths
         return true if all_excluded.any? { |pattern| path_matches?(path, pattern) }
+        return true if %w[GET HEAD].include?(env["REQUEST_METHOD"]) &&
+                       EzLogsAgent::Configuration::DEFAULT_EXCLUDED_AUTH_PAGES.any? { |pattern| path_matches?(path, pattern) }
 
         # Check file extensions
         return true if excluded_extension?(path)
@@ -205,6 +229,10 @@ module EzLogsAgent
       # @param timestamp [Time] Request start time
       # @return [Hash, nil] Event hash or nil if build fails or should be skipped
       def build_event(env:, status:, duration_ms:, outcome:, error_message:, timestamp:)
+        # A page the browser loaded only in case it is opened (Turbo 8 prefetches a link on hover,
+        # browsers prerender): not a visit. Its writes, if it made any, are still recorded.
+        return nil if speculative?(env)
+
         source_data = extract_source_data(env, status)
 
         # Skip if source_data indicates this request should not be captured
@@ -373,8 +401,15 @@ module EzLogsAgent
       def extract_rest_params(env)
         method = env["REQUEST_METHOD"]
 
-        # Skip GraphQL endpoints (handled separately)
-        return nil if graphql_path?(env["PATH_INFO"])
+        # Skip GraphQL calls (handled separately): a POST, or a GET carrying its query in the URL. A
+        # page that only has a `graphql` segment (/tags/graphql?page=2) keeps its params.
+        if graphql_path?(env["PATH_INFO"]) &&
+           (method == "POST" || (Rack::Utils.parse_query(env["QUERY_STRING"].to_s).keys & GRAPHQL_PARAMS).any?)
+          return nil
+        end
+        # Inbound email (Action Mailbox ingresses): the params are the whole raw email (people's
+        # messages, attachments). The request is recorded; the email never is.
+        return nil if env["PATH_INFO"].to_s.start_with?("/rails/action_mailbox/")
 
         if method == "GET"
           extract_query_string_params(env)
@@ -510,15 +545,20 @@ module EzLogsAgent
       # Check if path indicates a GraphQL endpoint
       # @param path [String] Request path
       # @return [Boolean]
+      # A `graphql` path segment anywhere: /graphql, /api/graphql, /api/v1/graphql, /admin/graphql/batch.
       def graphql_path?(path)
         return false if path.nil?
-        path == "/graphql" || path.start_with?("/graphql/")
+
+        path.split("/").include?("graphql")
       end
 
       # Check if request is a GraphQL POST request
       # Used to determine if we should inspect response body for errors
       # @param env [Hash] Rack environment
       # @return [Boolean]
+      # A GraphQL call in a GET's URL (a query, or a persisted query's variables and extensions).
+      GRAPHQL_PARAMS = %w[query variables extensions operationName].freeze
+
       def graphql_request?(env)
         env["REQUEST_METHOD"] == "POST" && graphql_path?(env["PATH_INFO"])
       rescue => e
@@ -859,7 +899,7 @@ module EzLogsAgent
       # something to anchor on.
       # @param env [Hash] Rack environment
       # @return [void]
-      def extract_and_set_actor(env)
+      def extract_and_set_actor(env, quiet: false)
         hook = EzLogsAgent.configuration.actor_from_request
         controller = env["action_controller.instance"]
 
@@ -873,7 +913,7 @@ module EzLogsAgent
         final_actor = merge_actor_with_ua(hook_actor, ua_match)
         EzLogsAgent::Actor.current = final_actor if final_actor
       rescue => e
-        log_error("extract_and_set_actor failed: #{e.message}")
+        log_error("extract_and_set_actor failed: #{e.message}") unless quiet
         # Continue without actor - better than crashing
       end
 
@@ -956,10 +996,16 @@ module EzLogsAgent
       # @param graphql_response_errors [String, nil] GraphQL errors from response body
       # @return [Array<String, String|nil>] [outcome, error_message]
       def determine_outcome(status, exception, graphql_response_errors = nil)
+        return ["failure", "sign-in required"] if exception == :sign_in_required
+
         # Exception raised = failure
         if exception
           return ["failure", "#{exception.class}: #{exception.message}"]
         end
+
+        # No status and no exception: the request was stopped without an answer from the app (a throw
+        # we don't know): never call that a success.
+        return ["failure", "the request did not finish"] if status.nil?
 
         # 4xx/5xx = failure (user's intent was not fulfilled)
         if status && status >= 400

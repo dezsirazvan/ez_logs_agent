@@ -243,7 +243,7 @@ module EzLogsAgent
           operation = ::EzLogsAgent::BulkSqlParser.detect_operation(payload[:sql])
           return unless operation
 
-          model_class = resolve_model_class(payload[:sql])
+          model_class = model_from_event_name(name) || resolve_model_class(payload[:sql])
           ::EzLogsAgent::RenderedTemplate.wrote_rows! # a write ran, captured or not
           return if model_class.nil?
           return if table_excluded?(model_class)
@@ -293,7 +293,7 @@ module EzLogsAgent
             duration_ms: duration_ms
           )
 
-          ::EzLogsAgent::Buffer.push(event)
+          push_when_committed(payload[:connection], event)
         rescue Exception => e # rubocop:disable Lint/RescueException
           # See class comment: a raise from an AS::N handler hurts other
           # subscribers, so we swallow EVERYTHING (not just StandardError).
@@ -325,6 +325,18 @@ module EzLogsAgent
         # "<Model> Destroy" fail all four suffix checks and bail in <1 µs.
         def name_eligible?(name)
           name.end_with?(" All") || name.end_with?(" Insert") || name.end_with?(" Upsert")
+        end
+
+        # The exact class Active Record named the query after ("Admin::Invoice Update All"): right
+        # for single-table inheritance and two models on one table, where the table name can't tell.
+        def model_from_event_name(name)
+          class_name = name.to_s.sub(/ (Delete All|Update All|Insert All|Upsert All|Bulk Insert|Bulk Upsert|Insert|Upsert)\z/, "")
+          return nil if class_name == name.to_s || !class_name.match?(/\A[A-Z]\w*(::[A-Z]\w*)*\z/)
+
+          klass = class_name.safe_constantize
+          klass.is_a?(Class) && klass < ::ActiveRecord::Base && !klass.abstract_class? ? klass : nil
+        rescue StandardError
+          nil
         end
 
         # Looks up the model class from the SQL's table name. Returns nil
@@ -526,6 +538,10 @@ module EzLogsAgent
         # the reader sees that N rows had their column X set to NULL.
         #
         # @return [Boolean]
+        def push_when_committed(connection, event)
+          ::EzLogsAgent::Transactional.push(connection, event)
+        end
+
         def framework_rewrite?(operation, parse_result)
           return false unless operation == :update_all
           return false unless parse_result.is_a?(Hash)

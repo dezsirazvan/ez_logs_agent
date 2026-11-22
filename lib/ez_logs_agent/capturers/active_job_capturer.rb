@@ -142,7 +142,8 @@ module EzLogsAgent
 
           if excluded_job_class?(job)
             EzLogsAgent::Logger.debug("[ActiveJobCapturer] Skipping capture (excluded job class: #{job.class.name})")
-            return block.call
+            # Nothing it writes is sent either (as an excluded path): never shown, it would only be stored.
+            return EzLogsAgent::Correlation.excluding { block.call }
           end
 
 
@@ -150,7 +151,10 @@ module EzLogsAgent
           # inside a console line / rake task / runner (EzLogsAgent::Command) never inherits it: a
           # worker loop run as a task would otherwise fold unrelated jobs into the task's action.
           inherited = previous_correlation unless EzLogsAgent::Command.actor
-          correlation_id = extract_correlation(job) || inherited || EzLogsAgent::Correlation.generate
+          enqueued_by = extract_correlation(job)
+          # A job run more than an hour after its action started is its own action.
+          enqueued_by = nil if enqueued_by && !EzLogsAgent::Correlation.recent_for_job?(enqueued_by)
+          correlation_id = enqueued_by || inherited || EzLogsAgent::Correlation.generate
           EzLogsAgent::Correlation.current = correlation_id
 
           start_time = Time.now
@@ -306,7 +310,12 @@ module EzLogsAgent
           {
             job_class: job.class.name,
             queue: job.queue_name,
-            arguments: extract_arguments(job)
+            arguments: extract_arguments(job),
+            # Which run of which job: two jobs of one class in an action stay two (a failure is never
+            # hidden by another job's success); a retry keeps its job's id. Retry number as Sidekiq's
+            # capture sends it: none on the first run, 1 on the first retry.
+            job_id: (job.job_id if job.respond_to?(:job_id)),
+            retry_count: (job.executions.to_i - 1 if job.respond_to?(:executions) && job.executions.to_i > 1)
           }.compact
         end
 

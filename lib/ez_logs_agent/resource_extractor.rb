@@ -67,7 +67,7 @@ module EzLogsAgent
 
       [{
         resource_type: resource_type_from_class(record.class),
-        resource_id: record.id.to_s
+        resource_id: EzLogsAgent::Tenant.qualified_id(record)
       }]
     rescue => e
       # Defensive: never raise exceptions, return empty array

@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.11] — 2026-11-21
+
+### Fixed
+- **A value written into a bulk write's SQL is never sent:** `Review.where("body LIKE '%x%'").delete_all` or `where("email = ?", email).update_all(...)` (Rails puts the value into the SQL) sent the filter with the value in it. Every string value written into the filter is now sent as `'[redacted]'` (numbers, such as ids, are kept); values passed as binds, and the new values of `update_all`, are masked by column, as before. A keyword, comma or `?` inside a quoted value no longer splits the statement.
+- **A rolled-back write no longer reads as done (Rails 7.2 and later).** Row changes, bulk writes and the writes below wait on their transaction (Rails' own `after_commit` for it) and are dropped when it rolls back: a failed step later in the transaction, `ActiveRecord::Rollback`, a rolled-back savepoint. Nothing is kept on the records and no callback is added to your models; past 10,000 waiting changes in one transaction the rest go out at once. Older Rails sends them at once, as before.
+- **A request Devise stopped for a sign-in (`throw :warden`) reads as a failure** ("sign-in required", 401), and so does a request ended by an exception outside `StandardError` (a request timeout). The throw and the exception reach the app exactly as before.
+- **Two ActiveJob runs of one class in an action stay two:** each job's `job_id` and retry number are sent, so one job's failure is never hidden by another's success.
+- **Writes that skip callbacks are recorded:** `update_column` and `update_columns` (with what changed) and `record.delete` (as a deletion).
+- **Schema-per-tenant and sharded apps keep tenants apart:** a record's id carries its tenant (`acme:5`) on a shard other than the model's default shard, or under an Apartment schema tenant (PostgreSQL schemas; never for Apartment's excluded models or a schema-qualified table, which every tenant shares; a database-per-tenant setup keeps plain ids, since reading its tenant would cost a query per row). Row changes, jobs and requests use the same rule. An app that uses neither keeps its ids unchanged.
+- Works with `ActiveRecord.permanent_connection_checkout = :disallowed` (the model's connection is used through `with_connection`).
+- **Signing in, signing out and resetting a password are recorded.** Only loading those pages (GET, HEAD) is left out, as in ezlogs-nextjs, and only whole path segments match, so `/sessions/42/book` or `/admin/users/5/login_as` are no longer hidden.
+- **GraphQL is read wherever the app mounts it** (`/api/graphql`, `/api/v1/graphql`), not only at `/graphql`: its operation name, and errors returned with status 200 as failures.
+- **An inbound email (Action Mailbox) is recorded without the email:** its request params (the whole raw message) are never sent.
+- **A bulk write names the exact model** Active Record named the query after, so single-table inheritance and two models on one table read right.
+- **Outside calls through Typhoeus and Excon** are recorded as steps too (beside Net::HTTP, which Faraday uses by default, and http.rb), with the same rules: domain, method, path pattern, status, time.
+- **An excluded job sends nothing,** its database writes included (as an excluded path): they were stored with no action and never shown.
+- **Action Cable channel actions are actions.** Their writes ran outside any request and were stored but never shown; each channel action is now one action, named by the connection's person (your `actor_from_request`, called with the connection's request).
+- **Solid Queue recurring tasks given as a `command:`** are captured (they run inside `SolidQueue::RecurringJob`, which was left out), so their writes form an action.
+- **The same secret names as every EZLogs agent:** `passcode`, `cardnumber`, and (new everywhere) one-time and recovery codes (`verification_code`, `recovery_code`, `backup_code`, `one_time_code`, `login_code`) and the word `jti`.
+- **A busy moment is never lost whole.** Events go out in posts of at most about 1 MB (the server refuses a post over 5 MB, and with it every event inside), strings over 4 KB are cut with a note of their length (a long text column, a raw email), and a post the server refuses (4xx other than 408 and 429) is not sent again.
+- **A job run more than an hour after its action started is its own action** (a job delayed by days, a late retry), never part of one dated days earlier.
+- **A page loaded only in case it is opened is no longer a visit.** Turbo 8 prefetches a link when the pointer rests on it (`X-Sec-Purpose: prefetch`), and browsers prefetch or prerender (`Sec-Purpose`, `Purpose`): those GET and HEAD requests record no request. Writes they make, if any, are still recorded. ezlogs-nextjs already skips them.
+
 ## [0.2.10] — 2026-11-21
 
 ### Changed

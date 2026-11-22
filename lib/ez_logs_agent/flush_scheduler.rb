@@ -53,7 +53,7 @@ module EzLogsAgent
         # exit (rails runner, rake, deploy restarts). One attempt, short
         # HTTP timeouts, and a hard cap (DNS isn't covered by
         # open_timeout), so a down server can't stall shutdown.
-        Timeout.timeout(FINAL_FLUSH_SECONDS) { Transport.send(Buffer.flush, timeout: 1) }
+        Timeout.timeout(FINAL_FLUSH_SECONDS) { Transport.batches(Buffer.flush).each { |batch| Transport.send(batch, timeout: 1) } }
 
         Logger.debug("[FlushScheduler] Stopped")
       rescue => error
@@ -95,7 +95,7 @@ module EzLogsAgent
         events = Buffer.flush
         return if events.nil? || events.empty?
 
-        RetrySender.send(events)
+        Transport.batches(events).each { |batch| RetrySender.send(batch) }
       rescue => error
         Logger.error("[FlushScheduler] Flush and send failed: #{error.class} - #{error.message}")
       end

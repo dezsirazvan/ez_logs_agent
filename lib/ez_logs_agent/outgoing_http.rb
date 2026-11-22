@@ -119,8 +119,74 @@ module EzLogsAgent
       end
     end
 
+    # Typhoeus::Request#finish: every completed call, alone (#run) or in parallel (Hydra). The time is
+    # libcurl's own total_time. Recorded only; the call and its callbacks run as before.
+    module TyphoeusRequest
+      def finish(response, *rest)
+        begin
+          uri = URI.parse(base_url.to_s)
+          correlation = EzLogsAgent::OutboundCapture.correlation_for(uri.host, uri.port)
+          if correlation
+            seconds = response.respond_to?(:total_time) ? response.total_time.to_f : 0.0
+            started = EzLogsAgent::OutboundCapture.clock - seconds
+            method = (options[:method] || :get).to_s
+            EzLogsAgent::OutboundCapture.record_http(correlation, started, uri.host, method, uri.path, response.code.to_i)
+          end
+        rescue StandardError
+          nil # never disturb the call
+        end
+        super
+      end
+    end
+
+    # An Excon middleware (Excon.defaults[:middlewares]): records each call when it answers or fails.
+    class ExconMiddleware
+      def initialize(stack)
+        @stack = stack
+      end
+
+      def request_call(datum)
+        begin
+          correlation = EzLogsAgent::OutboundCapture.correlation_for(datum[:host], datum[:port])
+          datum[:ezlogs_capture] = [correlation, EzLogsAgent::OutboundCapture.clock] if correlation
+        rescue StandardError
+          nil
+        end
+        @stack.request_call(datum)
+      end
+
+      def response_call(datum)
+        record(datum, datum.dig(:response, :status).to_i, nil)
+        @stack.response_call(datum)
+      end
+
+      def error_call(datum)
+        record(datum, 0, datum[:error])
+        @stack.error_call(datum)
+      end
+
+      private
+
+      def record(datum, status, error)
+        capture = datum.delete(:ezlogs_capture)
+        return unless capture
+
+        EzLogsAgent::OutboundCapture.record_http(capture[0], capture[1], datum[:host], datum[:method], datum[:path], status, error)
+      rescue StandardError
+        nil
+      end
+    end
+
     def self.install
       Net::HTTP.prepend(NetHttp) unless Net::HTTP.ancestors.include?(NetHttp)
+      if defined?(::Typhoeus::Request) && ::Typhoeus::Request.method_defined?(:finish) &&
+         !::Typhoeus::Request.ancestors.include?(TyphoeusRequest)
+        ::Typhoeus::Request.prepend(TyphoeusRequest)
+      end
+      if defined?(::Excon) && ::Excon.respond_to?(:defaults) && ::Excon.defaults[:middlewares].is_a?(Array) &&
+         !::Excon.defaults[:middlewares].include?(ExconMiddleware)
+        ::Excon.defaults[:middlewares] = ::Excon.defaults[:middlewares] + [ExconMiddleware]
+      end
       return unless defined?(::HTTP::Client) && ::HTTP::Client.method_defined?(:perform)
 
       ::HTTP::Client.prepend(HttpRb) unless ::HTTP::Client.ancestors.include?(HttpRb)
