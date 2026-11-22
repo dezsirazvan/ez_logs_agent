@@ -36,6 +36,18 @@ module EzLogsAgent
       subscribers subscriptions tasks teams templates threads tickets tokens transactions
       transcriptions transfers translations uploads users videos webhooks workspaces
     ].to_set.freeze
+    # Generic API vocabulary, kept by REST structure (deny by default): a verb only as the last segment,
+    # where the operation sits ("/transactions/sync", "/charges/:id/refund"); a noun, like a collection,
+    # only where a collection sits: first (after the version), after an id, or after a kept noun
+    # ("/link/token/create", "/v1/checkout/sessions"). Right after a collection comes an id's place,
+    # where a name could be ("/users/chat" → "/users/:id"). No vendor's words. Identical in the three places.
+    API_VERBS = %w[
+      approve archive authorize cancel capture complete confirm create delete download exchange export
+      finalize get import invalidate list lookup pay refresh refund reject remove resend
+      restore retrieve reverse search send start stop sync update upload validate verify
+      void
+    ].freeze
+    API_NOUNS = %w[auth balance chat checkout item link token].freeze
     VERSION = /\Av\d{1,2}\z/
     SECOND_LEVEL = %w[co com net org gov ac edu ne or].freeze
     PRIVATE_SUFFIXES = %w[local internal localhost lan home intranet corp test example invalid].freeze
@@ -140,16 +152,28 @@ module EzLogsAgent
 
       # "/v1/customers/cus_9x/subscriptions?expand=x" → "/v1/customers/:id/subscriptions".
       def path_pattern(path)
-        segments = path.to_s.split(/[?#]/, 2).first.to_s.split("/").reject(&:empty?).first(MAX_SEGMENTS)
-        first = true
-        kept = segments.map do |segment|
-          next segment if first && segment.match?(VERSION)
-
-          keep = first && COLLECTIONS.include?(segment)
-          first = false
-          keep ? segment : ":id"
+        all = path.to_s.split(/[?#]/, 2).first.to_s.split("/").reject(&:empty?)
+        kept = []
+        all.first(MAX_SEGMENTS).each_with_index do |segment, i|
+          kept << (keep_segment?(segment, i, all.size, kept) ? segment : ":id")
         end
         "/#{kept.join('/')}"
+      end
+
+      # A version first; a collection or API noun where a collection sits (first, after an id that
+      # follows a kept collection or noun, after a kept noun); an API verb only as the very last segment and only
+      # after such an id or a kept noun ("/charges/:id/refund", "/link/token/create"), never right after
+      # a collection or a masked segment, where a name could be ("/users/pay", "/acme/chat").
+      def keep_segment?(segment, index, total, kept)
+        return true if index.zero? && segment.match?(VERSION)
+
+        previous = kept.last
+        id_slot = previous == ":id" && kept.size >= 2 && kept[-2] != ":id" && !kept[-2].match?(VERSION)
+        after_noun = API_NOUNS.include?(previous)
+        return index == total - 1 && (id_slot || after_noun) if API_VERBS.include?(segment)
+        return false unless COLLECTIONS.include?(segment) || API_NOUNS.include?(segment)
+
+        previous.nil? || previous.match?(VERSION) || id_slot || after_noun
       end
 
       # Only the registrable domain leaves the app ("api.stripe.com" → "stripe.com"): a subdomain can

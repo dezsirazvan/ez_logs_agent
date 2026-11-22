@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.18] — 2026-11-22
+
+### Changed
+- **An outside call's path says what it did, still never a name.** The path is kept by REST structure, deny by default: an API version; a common collection name or a generic API noun (`token`, `link`, `item`, `checkout`, …) only where a collection sits (first, after an id, after a kept noun); a generic API verb (`create`, `exchange`, `refund`, …) only as the last segment and only after an id that follows a collection or after an API noun. Right after a collection, or after a hidden segment, comes an id's or a name's place, so a name never passes (`/users/james/orders` → `/users/:id/orders`, `/users/chat` → `/users/:id`, `/transactions/sync` → `/transactions/:id`). `/link/token/create` and `/v1/checkout/sessions` now arrive as they are and `/v1/charges/ch_1/refund` as `/v1/charges/:id/refund`, so EZLogs reads "Created a link token at plaid.com" instead of "Called plaid.com". Same rule as the EZLogs server and the other agent.
+
 ## [0.2.17] — 2026-11-22
 
 ### Fixed
