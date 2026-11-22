@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.14] — 2026-11-22
+
+### Fixed
+- **A Sidekiq job's retries stay one action.** A job enqueued outside a request (a console, a task, another job) got a new correlation id on every run, so one failing job read as one failed action per attempt. The id made on its first run is now kept in the job's payload, which Sidekiq pushes again for a retry; EZLogs reads "tried to charge card 3 times but it failed". A retry more than an hour later is its own action, as before.
+
 ## [0.2.13] — 2026-11-22
 
 ### Fixed

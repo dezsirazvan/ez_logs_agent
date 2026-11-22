@@ -128,6 +128,9 @@ module EzLogsAgent
           correlation_id = (enqueued_by if enqueued_by && EzLogsAgent::Correlation.recent_for_job?(enqueued_by)) ||
                            EzLogsAgent::Correlation.generate
           EzLogsAgent::Correlation.current = correlation_id
+          # Sidekiq retries push this same job hash again: a retry joins the first run's action (one
+          # failed job, not one action per attempt), as a job enqueued in a request already does.
+          job["correlation_id"] = correlation_id if job.is_a?(Hash) && enqueued_by != correlation_id
 
           # Measure execution time
           start_time = Time.now
