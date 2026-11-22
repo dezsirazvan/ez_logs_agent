@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.13] — 2026-11-22
+
+### Fixed
+- **A sign-out names the person who signed out (Devise / Warden).** The actor is read at the end of a request, when a sign-out has already cleared it. The agent now remembers the user Warden passes to `before_logout` (no fetch, no app code run at that moment) and, only when the end-of-request read finds no one, asks your `actor_from_request` hook once more with `current_user` answering that user. Only for a sign-out the person asked for (a sessions controller's destroy, a sign-out / log-out route; a logout Warden forces in another request names no one), and `current_user` answers only for the default scope. The sign-out itself is unchanged and nothing is added to its time.
+
 ## [0.2.12] — 2026-11-22
 
 ### Fixed

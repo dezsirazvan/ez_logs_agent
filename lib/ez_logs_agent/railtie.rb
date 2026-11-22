@@ -97,6 +97,9 @@ module EzLogsAgent
       # Refused-form detection and cross-service correlation (HTTP capture)
       install_http_helpers
 
+      # A Devise / Warden sign-out names the person who signed out
+      install_sign_out_actor
+
       # Setup FlushScheduler with fork-aware initialization
       setup_flush_scheduler
 
@@ -228,6 +231,21 @@ module EzLogsAgent
 
     # The rendered-template subscriber (refused forms) and the outgoing
     # X-Correlation-ID stamp (cross-service actions). Both fail open.
+    # A sign-out ends the session the actor hook reads, so the request would name no one. Warden's
+    # before_logout passes the user it is signing out: remember it (no fetch, no app code), and the
+    # end-of-request read asks the app's hook about that user when it finds no one. Never raises.
+    def self.install_sign_out_actor
+      return unless defined?(::Warden::Manager) && ::Warden::Manager.respond_to?(:before_logout)
+
+      ::Warden::Manager.before_logout do |user, auth, opts|
+        env = auth.respond_to?(:env) ? auth.env : nil
+        default_scope = auth.respond_to?(:config) ? auth.config[:default_scope] : nil
+        EzLogsAgent::Middleware::HttpRequest.note_signed_out_user(user, (opts || {})[:scope], env, default_scope)
+      end
+    rescue StandardError => e
+      EzLogsAgent::Logger.error("[Railtie] install_sign_out_actor failed: #{e.message}")
+    end
+
     def self.install_http_helpers
       EzLogsAgent::RenderedTemplate.install if EzLogsAgent.configuration.capture_http
       config = EzLogsAgent.configuration

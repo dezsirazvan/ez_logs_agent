@@ -19,6 +19,55 @@ module EzLogsAgent
         @app = app
       end
 
+      # Warden's before_logout (Railtie): remember the user Warden is signing out (its own object, no
+      # fetch, no app code run), the first one of the request. The end-of-request read uses it only when
+      # the app's actor hook then finds no one. Never raises; never changes the sign-out.
+      SIGNED_OUT_KEY = :ezlogs_signed_out_user
+
+      # Only a sign-out the person asked for: a sessions controller's destroy, or a sign-out / log-out
+      # route. A logout Warden forces inside another request (an expired session, a locked account)
+      # is no one's sign-out action, so it names no one.
+      SIGN_OUT_PATH = %r{/(sign|log)[_-]?out\b}i
+
+      def self.note_signed_out_user(user, scope, env = nil, default_scope = nil)
+        return unless user && EzLogsAgent::Correlation.current && sign_out_request?(env)
+
+        RequestStore.store[SIGNED_OUT_KEY] ||= [user, scope, default_scope]
+      rescue StandardError
+        nil
+      end
+
+      def self.sign_out_request?(env)
+        return false unless env.is_a?(Hash)
+
+        params = env["action_dispatch.request.path_parameters"] || {}
+        (params[:action].to_s == "destroy" && params[:controller].to_s.end_with?("sessions")) ||
+          env["PATH_INFO"].to_s.match?(SIGN_OUT_PATH)
+      end
+
+      # The app's controller as its actor hook sees it, with current_user (and current_<scope>) answering
+      # the signed-out user: everything else goes to the real controller.
+      class SignedOutController < BasicObject
+        # current_<scope> answers for the signed-out scope; current_user only when that scope is the
+        # default one (signing out an admin never makes the admin read as a user).
+        def initialize(controller, user, scope, default_scope = nil)
+          @controller = controller
+          @user = user
+          @readers = [:"current_#{scope || 'user'}"]
+          @readers << :current_user if scope.nil? || scope.to_s == (default_scope || :user).to_s
+        end
+
+        def respond_to?(name, include_all = false) = @readers.include?(name) || @controller.respond_to?(name, include_all)
+
+        def method_missing(name, *args, &block)
+          return @user if @readers.include?(name) && args.empty?
+
+          @controller.__send__(name, *args, &block)
+        end
+
+        def respond_to_missing?(name, include_all = false) = respond_to?(name, include_all)
+      end
+
       # Rack interface: call(env)
       # @param env [Hash] Rack environment
       # @return [Array] Rack response tuple [status, headers, body]
@@ -907,6 +956,11 @@ module EzLogsAgent
         hook_actor = nil
         if hook.respond_to?(:call)
           hook_actor = hook.call(env, controller)
+          # A sign-out cleared the person: ask the hook once more about the user Warden signed out.
+          signed_out = RequestStore.store[SIGNED_OUT_KEY]
+          if hook_actor.nil? && signed_out && controller
+            hook_actor = hook.call(env, SignedOutController.new(controller, *signed_out))
+          end
         end
 
         ua_match = EzLogsAgent::UserAgentDetector.classify(env["HTTP_USER_AGENT"])
@@ -948,6 +1002,7 @@ module EzLogsAgent
       # Clear actor context after request completes
       # @return [void]
       def clear_actor
+        RequestStore.store.delete(SIGNED_OUT_KEY) if defined?(RequestStore)
         EzLogsAgent::Actor.clear
       rescue => e
         log_error("clear_actor failed: #{e.message}")
