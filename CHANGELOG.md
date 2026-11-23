@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.21] — 2026-11-23
+
+### Fixed
+- **Outside calls made with Excon no longer warn, or raise.** The Excon middleware now declares that it adds no request options (`valid_parameter_keys`), as Excon's middleware contract asks. Before, Excon printed "does not define #valid_parameter_keys" on every request, and an app that runs `Excon.set_raise_on_warnings!(true)` saw every Excon call fail.
+
 ## [0.2.20] — 2026-11-23
+
+Also carries everything listed under 0.2.19, which was never released on its own.
 
 ### Fixed
 - **A bulk write's filter never exposes a value after one ending in a backslash.** On PostgreSQL, Rails writes `'C:\'` with a bare backslash before its closing quote; the masking read that as an escaped quote, so the next value in the filter (`email = '…'`) was sent unmasked. Such a statement is now sent as unreadable: no filter, no values.
@@ -10,7 +17,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Dev-only endpoints are left out by default.** `/hotwire-livereload`, `/rails/info`, `/rails/mailers` and `/__better_errors/*` (reload channels and development pages, never a user action), each with its sub-paths and whole path segments only (`/rails/information` stays recorded), are in the default excluded paths, so a development app no longer records them.
 
-## [0.2.19] — 2026-11-22
+## [0.2.19] — 2026-11-22 (not released; shipped in 0.2.20)
 
 ### Fixed
 - **An outside call with invalid UTF-8 in its path is still recorded.** Such a path used to raise while it was turned into a pattern, and the call was silently left out (the app's call itself was never affected). The path now ends at the first invalid byte, as it does at a query string.

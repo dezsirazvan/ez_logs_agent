@@ -141,6 +141,10 @@ module EzLogsAgent
 
     # An Excon middleware (Excon.defaults[:middlewares]): records each call when it answers or fails.
     class ExconMiddleware
+      # Excon's middleware contract (Excon::Middleware::Base): no request keys of its own. Without
+      # it Excon warns on every request, and raises for apps that set raise_on_warnings.
+      def self.valid_parameter_keys = []
+
       def initialize(stack)
         @stack = stack
       end

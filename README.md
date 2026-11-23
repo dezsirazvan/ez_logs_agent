@@ -93,7 +93,10 @@ This creates `config/initializers/ez_logs_agent.rb` with all available configura
 ### Requirements
 
 - **Ruby** >= 3.1.0
-- **Rails** (any recent version)
+- **Rails** 7.0+. On Rails 7.2 and later a write inside a transaction that rolls back is not sent (past 10,000
+  changes in one transaction, the rest are sent at once). Rails 7.0 and 7.1 have no public hook for that, so there a
+  rolled-back write is still sent and shows as done; both versions are past their security support, and upgrading to
+  7.2 fixes it.
 - **Sidekiq** (optional, auto-detected if present)
 - **ActiveRecord** (optional, auto-detected if present)
 
