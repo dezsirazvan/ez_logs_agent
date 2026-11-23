@@ -375,7 +375,8 @@ Configure how to extract the "who" (actor) from HTTP requests.
 config.actor_from_request = ->(env, controller) {
   return nil unless controller.respond_to?(:current_user)
   user = controller.current_user
-  return nil unless user
+  # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+  return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
   {
     id: user.id.to_s,
@@ -426,7 +427,8 @@ nil
 config.actor_from_request = ->(env, controller) {
   return nil unless controller.respond_to?(:current_user)
   user = controller.current_user
-  return nil unless user
+  # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+  return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
   { id: user.id.to_s, label: user.email }
 }
@@ -437,7 +439,8 @@ config.actor_from_request = ->(env, controller) {
 config.actor_from_request = ->(env, controller) {
   return nil unless controller.respond_to?(:current_user)
   user = controller.current_user
-  return nil unless user
+  # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+  return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
   { id: user.id.to_s, label: user.email }
 }
@@ -764,7 +767,8 @@ EzLogsAgent.configure do |config|
   config.actor_from_request = ->(env, controller) {
     return nil unless controller.respond_to?(:current_user)
     user = controller.current_user
-    return nil unless user
+    # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+    return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
     { id: user.id.to_s, label: user.email }
   }

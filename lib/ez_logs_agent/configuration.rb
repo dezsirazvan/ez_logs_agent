@@ -110,12 +110,13 @@ module EzLogsAgent
       "/sidekiq/*",              # Sidekiq Web UI sub-paths (auto-poll noise)
     ].freeze
 
-    # Sign-in, sign-out and password pages: only loading them (GET, HEAD) is left out. Signing in or
-    # out, and resetting a password, are recorded like any action (the same as ezlogs-nextjs).
+    # Sign-in and password pages: only loading them (GET, HEAD) is left out. Signing in, and
+    # resetting a password, are recorded like any action (the same as ezlogs-nextjs). A sign-out is
+    # never left out, whatever its method: a GET /logout link (Devise sign_out_via: :get) signs out.
     # Whole path segments only, so /sessions/42/book or /admin/users/5/login_as stay recorded.
     DEFAULT_EXCLUDED_AUTH_PAGES = [
-      "*/sign_in", "*/sign_in/*", "*/sign_out", "*/sign_out/*",
-      "*/login", "*/login/*", "*/logout", "*/logout/*",
+      "*/sign_in", "*/sign_in/*",
+      "*/login", "*/login/*",
       "/users/password", "/users/password/*",
       "/session", "/session/*"
     ].freeze

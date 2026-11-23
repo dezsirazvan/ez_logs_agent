@@ -21,6 +21,10 @@ module EzLogsAgent
     # A command running longer (a loop, a long backfill) continues as a new action under the same
     # name, so one never grows without bound. shortcut: fixed, make it configurable if asked.
     MAX_ACTION_SECONDS = 600
+    # Jobs one command action carries (Command.correlation(job: true)): a script's few jobs stay in
+    # its story; a backfill enqueuing thousands splits into actions of this many.
+    MAX_ACTION_JOBS = 100
+    JOB_COUNT_KEY = :ez_logs_command_job_count
 
     class << self
       # Runs the block as one command. A no-op wrapper when a correlation is already active.
@@ -52,39 +56,39 @@ module EzLogsAgent
         RequestStore.store.delete(ACTOR_KEY)
         RequestStore.store.delete(CORRELATION_KEY)
         RequestStore.store.delete(STARTED_KEY)
+        RequestStore.store.delete(JOB_COUNT_KEY)
         EzLogsAgent::Correlation.clear
       rescue StandardError => e
         EzLogsAgent::Logger.debug("[Command] finish failed: #{e.message}")
       end
 
-      # The correlation id a database event takes now: the current one, except that a command past
-      # MAX_ACTION_SECONDS moves on to a new one. Inside a job the command started, the job's own
+      # The correlation id a database event or a job enqueue (job: true) takes now: the current one,
+      # except that a command moves on to a new one past MAX_ACTION_SECONDS, or when a job would be
+      # its action's MAX_ACTION_JOBS + 1st. Inside a job the command started, the job's own
       # correlation is left alone.
-      def correlation
+      def correlation(job: false)
         current = EzLogsAgent::Correlation.current
         store = RequestStore.store
         return current unless current && store[CORRELATION_KEY] == current
         return current if store[JOB_DEPTH_KEY].to_i.positive? # a job's writes stay with the job
-        return current if now - store[STARTED_KEY].to_f < MAX_ACTION_SECONDS
+
+        jobs = store[JOB_COUNT_KEY].to_i + (job ? 1 : 0)
+        if now - store[STARTED_KEY].to_f < MAX_ACTION_SECONDS && jobs <= MAX_ACTION_JOBS
+          store[JOB_COUNT_KEY] = jobs
+          return current
+        end
 
         fresh = EzLogsAgent::Correlation.generate
         EzLogsAgent::Correlation.current = fresh
         store[CORRELATION_KEY] = fresh
         store[STARTED_KEY] = now
+        store[JOB_COUNT_KEY] = job ? 1 : 0
         fresh
       rescue StandardError
         EzLogsAgent::Correlation.current
       end
 
       def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-      # Whether `correlation_id` is a running command's own id. A job enqueued under it does not
-      # carry it: a backfill enqueuing thousands of jobs would fold them all into one action.
-      def owns?(correlation_id)
-        !correlation_id.nil? && RequestStore.store[CORRELATION_KEY] == correlation_id
-      rescue StandardError
-        false
-      end
 
       # Marks a job running in this thread (ActiveJob / Sidekiq capturers), so a long command never
       # moves on to a new action in the middle of a job that took the command's id.

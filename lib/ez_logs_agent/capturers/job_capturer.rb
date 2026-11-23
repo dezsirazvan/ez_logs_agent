@@ -44,15 +44,15 @@ module EzLogsAgent
           return yield unless job.is_a?(Hash)
 
           begin
-            # Read current correlation_id from context
-            correlation_id = EzLogsAgent::Correlation.current
+            # The current action's id, the same one its database writes carry (Command.correlation):
+            # a request's, a job's, or a console line's / task's / runner script's.
+            # An ActiveJob on the Sidekiq adapter ("wrapped") was already counted by ActiveJob's enqueue.
+            correlation_id = EzLogsAgent::Command.correlation(job: !job.key?("wrapped"))
 
             # Only inject if:
             # 1. correlation_id is present and not empty
             # 2. job doesn't already have one
-            # (A console line's or rake task's own id is not carried: its jobs are their own actions.)
-            usable = correlation_id && correlation_id.respond_to?(:empty?) && !correlation_id.empty? &&
-                     !EzLogsAgent::Command.owns?(correlation_id)
+            usable = correlation_id && correlation_id.respond_to?(:empty?) && !correlation_id.empty?
             unless job.key?("correlation_id")
               # Outside any action (a console, a task, a scheduler) the job gets its own id now, in its
               # payload: Sidekiq retries that same payload, so every attempt is one action.

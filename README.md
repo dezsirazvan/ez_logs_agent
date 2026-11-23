@@ -200,7 +200,17 @@ Every incoming HTTP request, with intelligent noise filtering:
 - `/cable*` — ActionCable WebSocket connections
 - `/sidekiq`, `/sidekiq/*` — Sidekiq Web UI (auto-polls every few seconds)
 - `/hotwire-livereload`, `/rails/info`, `/rails/mailers`, `/__better_errors/*` (and their sub-paths) — development-only reload channel and pages
-- `*/sign_in*`, `*/sign_out*`, `*/login*`, `*/logout*`, `/users/password*`, `/session*` — Auth pages (Devise + common patterns)
+- Loading (GET, HEAD) `*/sign_in*`, `*/login*`, `/users/password*`, `/session*` — Auth pages (Devise + common patterns). Signing in, signing out (any method, a GET `/logout` link included) and resetting a password are recorded.
+
+**Secrets inside values:** every string and key the agent sends (params, job arguments, row values, display names, error messages) is checked by its shape, whatever its key:
+
+  - **URLs:** a URL (`scheme://…`, alone or inside a text, also URL-encoded as `https%3A%2F%2F…`) keeps its scheme, host and path; its `user:pass@` and everything from `?` or `#` (or `%3F`, `%23`) are removed. A value that is a path on its own (`/first_password/edit?reset_password_token=…`, `//cdn/x.png?sig=…`) loses its query and fragment too. Inside such a URL or path, a segment that looks generated (16+ characters with a lowercase letter, an uppercase letter and a digit, never a file name with a `.`: Slack and Discord webhook tokens, `/reset/<token>`) and a Telegram `bot<digits>:<token>` segment become `[FILTERED]`. The event's own request or outbound `path` keeps its segments (its query and card numbers still go): titles read the ids there.
+  - **Known shapes:** JWTs, private keys, Stripe / Stripe webhook / OpenAI-style (`sk-` with a digit) / GitHub / Slack / AWS keys, and any 15-16 digit number that passes the Luhn check (card numbers, wherever they sit) become `[FILTERED]`.
+  - **Bearer / Basic:** the word after `Bearer` is masked when it has a digit or symbol, a lowercase-then-uppercase pair (base64) or 16+ characters; after `Basic`, the same with 8+ characters.
+  - **Mailer jobs:** in an ActionMailer job (mailer class, method, then `deliver_now` / `deliver_later`) whose method has a secret word (`reset_password_instructions`, `confirmation_instructions`, `unlock_instructions`, `invitation_instructions`, …), every positional string is masked except method names, GlobalIDs, numbers and UUIDs, so the token Devise passes is never sent. Any other job's arguments are left to the rules above (`["card_declined", "Order 42 for Alice"]` stays).
+  - Keys are checked the same way (two keys masked alike both stay: `[FILTERED]`, `[FILTERED] 2`), and anything nested deeper than 8 levels is sent as `[Object]`. Error messages are cut to 4 KB like every other string.
+  What this costs, on purpose: a URL's query and fragment are dropped even when they are ordinary data (`youtube.com/watch?v=…` reads as `youtube.com/watch`); any 15-16 digit number that passes Luhn is masked, so are some order ids and IMEIs; a slug, username or random id of 16+ characters with mixed case and digits inside a link in a value (a nanoid, `github.com/JohnDoe2024Developer`) is masked; file names are not. Not masked: a token in the request's own route path (`GET /reset/<token>`), a known limit until the agents send the route pattern; a link without `scheme://` inside a sentence (`see /reset?token=…`), a text that is not a URL (`reset_password_token=abc`; its key is still filtered by name), and a short lowercase or letters-only word after `Bearer` / `Basic` (`Bearer of bad news`, `Basic Monthly`, `Basic 2`; this also lets through a real but unusual credential such as `Bearer abcdef`).
+
 
 **Note on GraphQL:** All GraphQL operations (queries, mutations, subscriptions) are captured. The server classifies queries as "background" significance, allowing users to toggle their visibility in the UI since they're typically read-only operations.
 
@@ -269,9 +279,10 @@ A change made outside any request or job reads as an action too, named after wha
 
 Only database changes are grouped there; a line that only reads makes no action. A run longer
 than 10 minutes continues as a new action with the same name every 10 minutes. A job enqueued
-there, or captured as a job when run there, is its own action, so a task enqueuing thousands of jobs
-never becomes one huge action. (A job EZLogs does not capture, such as an excluded class, joins the
-line or task that ran it.) Rake tasks that run a job worker for the life of the process
+there joins that action, as a job enqueued in a request does (an `after_commit` callback of a record
+the line updated, for instance), up to 100 jobs per action: a backfill enqueuing thousands moves on
+to a new action with the same name every 100 jobs; a job run inline there without being enqueued (`perform_now`) is its
+own action. A job runs in the action it was enqueued in only within an hour of it. Rake tasks that run a job worker for the life of the process
 (`jobs:work`, `resque:work`, `solid_queue:start`, `good_job:start`, …) are left alone; add your own
 with `config.excluded_rake_tasks`, or turn the whole grouping off with `config.capture_commands = false`.
 Work started on other threads is not grouped.
@@ -423,7 +434,8 @@ EzLogsAgent.configure do |config|
   config.actor_from_request = ->(env, controller) {
     return nil unless controller.respond_to?(:current_user)
     user = controller.current_user
-    return nil unless user
+    # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+    return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
     {
       id: user.id.to_s,       # Stable identifier
@@ -530,7 +542,8 @@ EzLogsAgent.configure do |config|
     # Return nil if controller not available or user not authenticated
     return nil unless controller.respond_to?(:current_user)
     user = controller.current_user
-    return nil unless user
+    # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+    return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
     # Return actor hash
     {
@@ -577,7 +590,8 @@ When actor is unknown, events are captured with `actor: null`. **Missing data is
 config.actor_from_request = ->(env, controller) {
   return nil unless controller.respond_to?(:current_user)
   user = controller.current_user
-  return nil unless user
+  # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+  return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
   { id: user.id.to_s, label: user.email }
 }
@@ -588,7 +602,8 @@ config.actor_from_request = ->(env, controller) {
 config.actor_from_request = ->(env, controller) {
   return nil unless controller.respond_to?(:current_user)
   user = controller.current_user
-  return nil unless user
+  # Only a signed-in, saved user: a guest object (id 0, never saved) is no one.
+  return nil if user.nil? || (user.respond_to?(:persisted?) && !user.persisted?)
 
   { id: user.id.to_s, label: user.email }
 }

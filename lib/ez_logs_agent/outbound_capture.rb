@@ -47,7 +47,9 @@ module EzLogsAgent
       void
     ].freeze
     API_NOUNS = %w[auth balance chat checkout item link token].freeze
-    VERSION = /\Av\d{1,2}\z/
+    # An API prefix: "api" or a version ("v1", "v2"), kept wherever it sits ("/api/v2/models"):
+    # never a name. A date version ("2010-04-01") stays an id.
+    API_PREFIX = /\A(?:api|v\d{1,2})\z/
     SECOND_LEVEL = %w[co com net org gov ac edu ne or].freeze
     PRIVATE_SUFFIXES = %w[local internal localhost lan home intranet corp test example invalid].freeze
     HOST = /\A[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?(:\d{1,5})?\z/
@@ -160,20 +162,20 @@ module EzLogsAgent
         "/#{kept.join('/')}"
       end
 
-      # A version first; a collection or API noun where a collection sits (first, after an id that
+      # An API prefix ("api", a version) anywhere; a collection or API noun where a collection sits (first, after an id that
       # follows a kept collection or noun, after a kept noun); an API verb only as the very last segment and only
       # after such an id or a kept noun ("/charges/:id/refund", "/link/token/create"), never right after
       # a collection or a masked segment, where a name could be ("/users/pay", "/acme/chat").
       def keep_segment?(segment, index, total, kept)
-        return true if index.zero? && segment.match?(VERSION)
+        return true if segment.match?(API_PREFIX)
 
         previous = kept.last
-        id_slot = previous == ":id" && kept.size >= 2 && kept[-2] != ":id" && !kept[-2].match?(VERSION)
+        id_slot = previous == ":id" && kept.size >= 2 && kept[-2] != ":id" && !kept[-2].match?(API_PREFIX)
         after_noun = API_NOUNS.include?(previous)
         return index == total - 1 && (id_slot || after_noun) if API_VERBS.include?(segment)
         return false unless COLLECTIONS.include?(segment) || API_NOUNS.include?(segment)
 
-        previous.nil? || previous.match?(VERSION) || id_slot || after_noun
+        previous.nil? || previous.match?(API_PREFIX) || id_slot || after_noun
       end
 
       # Only the registrable domain leaves the app ("api.stripe.com" → "stripe.com"): a subdomain can

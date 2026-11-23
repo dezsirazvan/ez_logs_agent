@@ -94,9 +94,10 @@ module EzLogsAgent
         # @param job [ActiveJob::Base] The job being enqueued
         # @return [void]
         def propagate_correlation(job)
-          correlation_id = EzLogsAgent::Correlation.current
+          # The current action's id, the same one its database writes carry: a request's, a job's,
+          # or a console line's / task's / runner script's (Command.correlation).
+          correlation_id = EzLogsAgent::Command.correlation(job: true)
           return unless correlation_id && !correlation_id.empty?
-          return if EzLogsAgent::Command.owns?(correlation_id) # enqueued from a console line / task
 
           job.ezlogs_correlation_id = correlation_id
         rescue StandardError => e

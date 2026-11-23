@@ -293,8 +293,9 @@ module EzLogsAgent
       # @return [Hash, nil] Event hash or nil if build fails or should be skipped
       def build_event(env:, status:, duration_ms:, outcome:, error_message:, timestamp:)
         # A page the browser loaded only in case it is opened (Turbo 8 prefetches a link on hover,
-        # browsers prerender): not a visit. Its writes, if it made any, are still recorded.
-        return nil if speculative?(env)
+        # browsers prerender): not a visit. Its writes, if it made any, are still recorded, and so is a
+        # sign-out Warden did during it (a prefetched GET /logout link signed the person out).
+        return nil if speculative?(env) && !(defined?(RequestStore) && RequestStore.store[SIGNED_OUT_KEY])
 
         source_data = extract_source_data(env, status)
 
@@ -350,6 +351,9 @@ module EzLogsAgent
         end
 
         base_data[:signed_in] = true if defined?(RequestStore) && RequestStore.store[SIGNED_IN_KEY]
+        # Warden signed someone out on a sign-out route (note_signed_out_user): the proof a request
+        # signed out, whatever its method (a GET /logout link included).
+        base_data[:signed_out] = true if defined?(RequestStore) && RequestStore.store[SIGNED_OUT_KEY]
         base_data.compact # Remove nil values
       rescue => e
         log_error("extract_source_data failed: #{e.message}")

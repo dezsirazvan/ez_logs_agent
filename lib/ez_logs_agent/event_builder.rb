@@ -79,8 +79,17 @@ module EzLogsAgent
       validate_outcome_error_consistency!(validated_outcome, error_message)
 
       # Sanitize sensitive data, then cut long strings (a long text column, a raw email): one event
-      # can never make a batch too large to send.
+      # can never make a batch too large to send. Every string then passes the value-shape masker
+      # (Sanitizer.scrub_text): a URL's query, a token inside a text, under any key.
       sanitized_source_data = cap_strings(sanitize_hash(validated_source_data))
+      # The request's or outside call's own path keeps its segments (titles read its ids).
+      [:path, "path"].each do |key|
+        raw = validated_source_data[key]
+        next unless raw.is_a?(String) && sanitized_source_data[key].is_a?(String)
+
+        capped = raw.length > MAX_STRING ? "#{raw[0, MAX_STRING]}… [#{raw.length} characters]" : raw
+        sanitized_source_data[key] = Sanitizer.scrub_text(capped, segments: false)
+      end
       sanitized_context = validated_context.nil? ? nil : cap_strings(sanitize_hash(validated_context))
 
       # Build and return Event hash
@@ -93,23 +102,26 @@ module EzLogsAgent
         resource_ids: validated_resource_ids,
         context: sanitized_context,
         duration_ms: validated_duration_ms,
-        error_message: error_message
+        error_message: cap_strings(error_message)
       }
     end
 
     MAX_STRING = 4_096
 
-    # Strings over 4 KB keep their start and say how long they were; nested values bounded by depth.
+    # Strings over 4 KB keep their start and say how long they were, then are value-shape masked
+    # (string keys too); anything nested deeper than 8 levels becomes "[Object]", never sent unmasked.
     def self.cap_strings(value, depth = 0)
       case value
       when String
-        value.length > MAX_STRING ? "#{value[0, MAX_STRING]}… [#{value.length} characters]" : value
+        Sanitizer.scrub_text(value.length > MAX_STRING ? "#{value[0, MAX_STRING]}… [#{value.length} characters]" : value)
       when Hash
-        return value if depth > 8
+        return "[Object]" if depth > 8
 
-        value.transform_values { |v| cap_strings(v, depth + 1) }
+        value.each_with_object({}) do |(k, v), out|
+          out[k.is_a?(String) ? Sanitizer.unique_key(out, Sanitizer.scrub_text(k)) : k] = cap_strings(v, depth + 1)
+        end
       when Array
-        return value if depth > 8
+        return "[Object]" if depth > 8
 
         value.map { |v| cap_strings(v, depth + 1) }
       else
