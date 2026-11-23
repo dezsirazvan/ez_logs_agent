@@ -17,10 +17,9 @@ module EzLogsAgent
   # - fails open: nothing here can raise into, hang or retry the app's call.
   module OutboundCapture
     # The server's rules (Summary::OutboundCall, EventIngest::OutboundCalls), so nothing it would drop
-    # ever leaves the app: only API versions and the first segment after them when it is in
-    # COLLECTIONS ("/v1/customers/cus_9x/orders" → "/v1/customers/:id/:id"); a host's registrable
-    # domain, never an address or an internal name.
-    # The first word after the version is kept only when it is one of these common API collections
+    # ever leaves the app: the path kept by REST structure (#keep_segment?: "/v1/customers/cus_9x/orders"
+    # → "/v1/customers/:id/orders"); a host's registrable domain, never an address or an internal name.
+    # A collection word is kept only when it is one of these common API collections
     # ("/v1/charges" → "Created a charge"). Any other word becomes :id, even one that looks plural:
     # "charles" or "james" could be a person (owner decision, 2026-11-21). Identical in the server,
     # ez_logs_agent and ezlogs-nextjs (spec/domain/summary/outbound_call_spec.rb checks).
@@ -37,7 +36,7 @@ module EzLogsAgent
       transcriptions transfers translations uploads users videos webhooks workspaces
     ].to_set.freeze
     # Generic API vocabulary, kept by REST structure (deny by default): a verb only as the last segment,
-    # where the operation sits ("/transactions/sync", "/charges/:id/refund"); a noun, like a collection,
+    # where the operation sits ("/charges/:id/refund", "/link/token/create"); a noun, like a collection,
     # only where a collection sits: first (after the version), after an id, or after a kept noun
     # ("/link/token/create", "/v1/checkout/sessions"). Right after a collection comes an id's place,
     # where a name could be ("/users/chat" → "/users/:id"). No vendor's words. Identical in the three places.
@@ -152,7 +151,8 @@ module EzLogsAgent
 
       # "/v1/customers/cus_9x/subscriptions?expand=x" → "/v1/customers/:id/subscriptions".
       def path_pattern(path)
-        all = path.to_s.split(/[?#]/, 2).first.to_s.split("/").reject(&:empty?)
+        # scrub: invalid UTF-8 would raise in split and lose the call; "?" ends the path there, so it never forms a word.
+        all = path.to_s.scrub("?").split(/[?#]/, 2).first.to_s.split("/").reject(&:empty?)
         kept = []
         all.first(MAX_SEGMENTS).each_with_index do |segment, i|
           kept << (keep_segment?(segment, i, all.size, kept) ? segment : ":id")

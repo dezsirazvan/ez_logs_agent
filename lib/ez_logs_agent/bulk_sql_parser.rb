@@ -51,9 +51,10 @@ module EzLogsAgent
     # The order of placeholders in the SQL corresponds 1:1 with the order
     # of values in `binds` / `type_casted_binds`.
     PLACEHOLDER = /(?:\$\d+|\?)/.freeze
-    # A SQL string literal: 'it''s', and MySQL's 'O\'Brien' (a PostgreSQL literal ending in a
-    # backslash is rare and reads as longer: more is masked, never less). Literals are swapped for
-    # tokens before anything else, so a keyword, comma, "?" or "$1" inside one never splits the SQL.
+    # A SQL string literal: 'it''s', and MySQL's 'O\'Brien'. Literals are swapped for tokens before
+    # anything else, so a keyword, comma, "?" or "$1" inside one never splits the SQL. A PostgreSQL
+    # literal ending in a backslash ('C:\') is misread as escaping its closing quote; the quote left
+    # over outside every token then makes the statement unparseable, so no value is ever sent.
     SQL_STRING_LITERAL = /'(?:[^'\\]|\\.|'')*'/m.freeze
     LITERAL_TOKEN = /'\u0001(\d+)'/.freeze
     LITERAL_MASK = "'[redacted]'"
@@ -73,10 +74,16 @@ module EzLogsAgent
 
       case sql_stripped
       when /\ADELETE FROM /i
-        parse_delete(tokenize_literals(sql_stripped, []), type_casted_binds || [])
+        tokenized = tokenize_literals(sql_stripped, [])
+        return { unparseable: true } if stray_quote?(tokenized)
+
+        parse_delete(tokenized, type_casted_binds || [])
       when /\AUPDATE /i
         literals = []
-        parse_update(tokenize_literals(sql_stripped, literals), type_casted_binds || [], literals)
+        tokenized = tokenize_literals(sql_stripped, literals)
+        return { unparseable: true } if stray_quote?(tokenized)
+
+        parse_update(tokenized, type_casted_binds || [], literals)
       when /\AINSERT INTO /i
         parse_insert(sql_stripped)
       else
@@ -92,6 +99,13 @@ module EzLogsAgent
     end
 
     # The statement with each string literal swapped for "'\u0001N'" (N its index in `literals`).
+    # A quote or backslash outside every literal token: the literals were not read as written (see
+    # SQL_STRING_LITERAL; an E'' string after a backslash-ended literal).
+    def stray_quote?(tokenized)
+      rest = tokenized.gsub(LITERAL_TOKEN, "")
+      rest.include?("'") || rest.include?("\\")
+    end
+
     def tokenize_literals(sql, literals)
       sql.gsub(SQL_STRING_LITERAL) do
         literals << Regexp.last_match(0)

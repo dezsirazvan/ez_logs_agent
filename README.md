@@ -196,6 +196,7 @@ Every incoming HTTP request, with intelligent noise filtering:
 - `/favicon.ico`, `/.well-known*`, `/robots.txt`, `/sitemap.xml` — Crawler / browser plumbing
 - `/cable*` — ActionCable WebSocket connections
 - `/sidekiq`, `/sidekiq/*` — Sidekiq Web UI (auto-polls every few seconds)
+- `/hotwire-livereload`, `/rails/info`, `/rails/mailers`, `/__better_errors/*` (and their sub-paths) — development-only reload channel and pages
 - `*/sign_in*`, `*/sign_out*`, `*/login*`, `*/logout*`, `/users/password*`, `/session*` — Auth pages (Devise + common patterns)
 
 **Note on GraphQL:** All GraphQL operations (queries, mutations, subscriptions) are captured. The server classifies queries as "background" significance, allowing users to toggle their visibility in the UI since they're typically read-only operations.

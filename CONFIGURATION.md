@@ -170,6 +170,8 @@ Additional HTTP paths to exclude from capture. With HTTP capture on (`capture_ht
 config.excluded_paths = ["/admin*", "/internal*", "/api/internal*"]
 ```
 
+Built-in defaults include the development-only endpoints `/hotwire-livereload`, `/rails/info`, `/rails/mailers` and `/__better_errors/*` (each with its sub-paths, whole path segments only).
+
 **Pattern matching:**
 - Use `*` suffix for prefix matching
 - `/admin*` matches `/admin`, `/admin/users`, `/admin/anything`

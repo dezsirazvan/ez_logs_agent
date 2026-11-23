@@ -45,7 +45,8 @@ EzLogsAgent.configure do |config|
   # =============================================================================
 
   # Additional paths to exclude from capture, with the database writes inside them (added to built-in defaults)
-  # Built-in: /rails/active_storage*, /assets*, /packs*, /vite*, /health*, /up, /favicon.ico
+  # Built-in: /rails/active_storage*, /assets*, /packs*, /vite*, /health*, /up, /favicon.ico,
+  # /hotwire-livereload, /rails/info, /rails/mailers, /__better_errors/* (development-only)
   # config.excluded_paths = ["/admin*", "/internal*"]
 
   # Additional tables to exclude from database capture (added to built-in defaults)

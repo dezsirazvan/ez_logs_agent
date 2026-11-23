@@ -95,6 +95,13 @@ module EzLogsAgent
       "/metrics",                # Prometheus metrics endpoint
       "/favicon.ico",            # Browser favicon
       "/*.hot-update.*",         # Hot module replacement
+      "/hotwire-livereload",     # hotwire-livereload dev-server reload channel (whole segments only)
+      "/hotwire-livereload/*",
+      "/rails/info",             # Rails dev-only info pages
+      "/rails/info/*",
+      "/rails/mailers",          # Rails dev-only mailer previews
+      "/rails/mailers/*",
+      "/__better_errors/*",      # better_errors dev-only error page endpoints
       "/.well-known*",           # Well-known URIs (security.txt, etc.)
       "/robots.txt",             # Search engine crawler config
       "/sitemap.xml",            # Sitemap for crawlers
