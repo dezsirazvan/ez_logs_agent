@@ -37,12 +37,14 @@ module EzLogsAgent
       credit_card card_number cvv cvc
       passcode cardnumber
       verification_code recovery_code backup_code one_time_code login_code
+      jwt webhook_url connection_string database_url access_key auth_key session_key license_key
+      encryption_key ssh_key master_key mnemonic seed_phrase auth_code reset_code invite_code magic_link
     ].freeze
 
     # Short secret names matched only as a WHOLE word of the key (split on non-letters and
     # camelCase), so `pin` matches `pin`, `pinCode`, `mdm_unlock_pin` but never `shipping`.
     # Same list as the Next.js agent's SENSITIVE_WORD_PATTERNS.
-    WORD_PATTERNS = %w[pin otp totp iban mfa passphrase jti].freeze
+    WORD_PATTERNS = %w[pin otp totp iban mfa passphrase jti dsn].freeze
 
     module_function
 

@@ -57,7 +57,7 @@ module EzLogsAgent
 
         say "1. Get your API key from EzLogs:", :bold
         say "   → Log in to your EzLogs dashboard"
-        say "   → Go to Settings → API Keys"
+        say "   → Go to Install & keys (the menu behind your initials)"
         say "   → Create a new API key for this application\n\n"
 
         say "2. Configure the agent:", :bold

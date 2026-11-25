@@ -396,7 +396,7 @@ module EzLogsAgent
 
     # One line per process at the default log level, so "is it on?" is
     # answerable from the logs: where events go and which key, shown the
-    # way the dashboard's Settings → API Keys shows it (`ezl_` + first 8
+    # way the dashboard's Install & keys page shows it (`ezl_` + first 8
     # characters). Other token shapes get no hint. Silent in the test env.
     #
     # @param capturing [Boolean] result of validate_configuration

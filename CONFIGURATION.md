@@ -71,7 +71,7 @@ config.project_token = ENV['EZLOGS_API_KEY']
 
 **Where to get it:**
 1. Log into your EZLogs dashboard
-2. Go to Settings → API Keys
+2. Go to Install & keys (the menu behind your initials)
 3. Create a new key or copy an existing one
 4. Keys start with `ezl_` prefix
 

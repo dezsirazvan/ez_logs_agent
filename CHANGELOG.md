@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.23] — 2026-11-25
+
+### Security
+- **More credential names are never sent.** Params, job arguments and row changes now also treat as secret any key containing `jwt`, `webhook_url` (a Slack or Discord webhook), `connection_string`, `database_url`, `access_key`, `auth_key`, `session_key`, `license_key`, `encryption_key`, `ssh_key`, `master_key`, `mnemonic`, `seed_phrase`, `auth_code`, `reset_code`, `invite_code`, `magic_link`, and `dsn` as a whole word. Same list as ezlogs-nextjs 0.4.17, `ez_logs_supabase` 1.5.5 and the EZLogs server.
+
 ## [0.2.22] — 2026-11-23
 
 ### Security

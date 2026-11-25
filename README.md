@@ -163,7 +163,7 @@ Check your Rails logs for the startup line. It is printed once per process (web,
 [EzLogsAgent] capturing → app.ezlogs.io (key ezl_a1b2c3d4…)
 ```
 
-The key is shown the way Settings → API Keys shows it (`ezl_` + first 8 characters), so you can tell which key the app uses. If something is missing, the line says what:
+The key is shown the way Install & keys shows it (`ezl_` + first 8 characters), so you can tell which key the app uses. If something is missing, the line says what:
 
 ```
 [EzLogsAgent] not capturing: project_token missing
@@ -362,7 +362,7 @@ EzLogsAgent.configure do |config|
   # Required Settings
   # ==========================================
 
-  # API Key (get this from your EZLogs dashboard under Settings > API Keys)
+  # API Key (get this from your EZLogs dashboard under Install & keys)
   # This is sent as a Bearer token in the Authorization header
   config.project_token = "ezl_your_api_key_here"
 
@@ -787,7 +787,7 @@ Common validation errors:
 
 1. **Verify your API key:**
    - Log into your EZLogs dashboard
-   - Go to Settings > API Keys
+   - Go to Install & keys (the menu behind your initials)
    - Copy the active API key
    - Paste it into `config.project_token` (include the `ezl_` prefix)
 
