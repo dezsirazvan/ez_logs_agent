@@ -1,68 +1,51 @@
-# EZLogs Agent
+# EZLogs for Rails
 
-[Website](https://ezlogs.io/) · [Documentation](https://ezlogs.io/rails/) · [Next.js sister agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs)
+[Website](https://ezlogs.io/) · [Documentation](https://ezlogs.io/rails/) · [Next.js agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs) · [Supabase](https://github.com/dezsirazvan/ez_logs_supabase)
 
-**Drop-in activity logging for Rails applications.**
+**Know what your app and its AI agents did, in plain English.**
 
-EZLogs Agent captures what happens in your Rails app — HTTP requests, background jobs, database changes — and sends them to the EZLogs server, where they're transformed into human-readable stories that anyone on your team can understand.
-
-Wire-format identical to the [Next.js sister agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs) (`ezlogs-nextjs` on npm). Same server ingests both. Use Rails on the back end and Next.js on the front end? You see one unified Action timeline.
-
----
-
-## The Problem
-
-When someone clicks "Reset Password" in your app, a cascade of events unfolds:
-- HTTP requests hit your server
-- Database records get updated
-- Background jobs are queued
-- Emails are sent
-- Sessions are invalidated
-
-Right now, understanding what actually happened requires:
-- Opening multiple tools (application logs, Sidekiq dashboard, database console)
-- Piecing together timestamps across different systems
-- Reading cryptic stack traces and technical jargon
-- Having an engineer translate everything into plain English
-
-**EZLogs solves this.**
-
-Instead of scattered technical logs, you see a complete story:
+This gem records what happens in your Rails app (requests, background jobs, database changes,
+calls to outside services) and sends it to [EZLogs](https://ezlogs.io). There, each thing someone
+did becomes one card anyone in your company can read, support and founders included:
 
 ```
-Password Reset — jessica@example.com
-2:23 PM, January 15, 2025
+00:28  Marked booking 'BRK-FQYA' as rebooked
+       Changed the status from disrupted to rebooked and changed the sailing
+       Agent · Rebooking assistant · 1 entity
 
-  ✓ Reset link created (expires in 1 hour)
-  ✓ Email sent to jessica@example.com
-  ✓ All active sessions logged out (2 devices)
-  ✗ Push notification failed (user has notifications disabled)
+00:27  Refund 'RF-3JRW' failed
+       Changed the status from pending to failed (card expired, 32.10 EUR)
+       Reason: Card expired (card ending 0069)
+       Agent · Rebooking assistant · 2 entities
 
-Status: Completed successfully
+00:26  Marked sailing 'Wed 07:10 Brackwater → Holm' as cancelled
+       Changed the status from scheduled to cancelled, marked 30 bookings as disrupted
+       Tomás Rivera · 31 entities
 ```
 
-Your support team can read that. Your product manager can read that. Your CEO can read that. **No engineer required.**
+The request, the jobs it queued and every row they changed land in one card, with who did it: a
+person, an AI agent or the system. On top of that you get:
 
----
+- **Pulse:** where every person and every record stands right now.
+- **Alerts:** pin a question ("tell me when a refund fails"), get an email or a Slack message.
+- **MCP:** your own AI (Claude, ChatGPT, Cursor) can read what happened and answer from it.
+- **Shares:** signed links, embeds and signed audit exports.
 
-## What EZLogs Is (and Is NOT)
+The agent only reads. It never changes anything in your app, never blocks a request, and drops
+passwords, tokens and other secrets before anything leaves your app. Same wire format as the
+[Next.js agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs), so a Rails back end and a
+Next.js front end show up in one timeline.
 
-### EZLogs Is:
+**Fastest install:** paste this into Cursor, Claude Code or any coding AI:
 
-- **An application-level activity log** — Shows what happened in your system in business terms
-- **A bridge between technical systems and business understanding** — Translates technical events into human language
-- **Best-effort and non-blocking** — Never impacts your application's performance or reliability
-- **Safe to run in production** — Designed to fail gracefully if anything goes wrong
+```text
+Install EZLogs in this app by following https://app.ezlogs.io/install/rails.md
+```
 
-### EZLogs Is NOT:
+Or follow the steps below. Free while in beta: [sign up](https://app.ezlogs.io).
 
-- **A monitoring tool** — Use Datadog, New Relic, or CloudWatch for performance monitoring
-- **A metrics platform** — Use your existing APM for request rates, response times, etc.
-- **An audit log** — Use PaperTrail or Audited for compliance and legal requirements
-- **A guaranteed delivery system** — Events may be dropped if the server is unreachable (this is intentional)
-- **A replacement for debugging tools** — Use Sentry, Bugsnag, or your IDE debugger for code-level debugging
-
-**EZLogs complements your existing tools by focusing on business understanding, not technical signals.**
+EZLogs is not a monitoring or metrics tool and does not replace Sentry or your APM. It tells
+people what happened, in words.
 
 ---
 
