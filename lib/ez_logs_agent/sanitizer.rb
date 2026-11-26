@@ -193,6 +193,8 @@ module EzLogsAgent
       # @return [Object] Sanitized value (may be the original primitive).
       def sanitize_value(key, value, depth = 0)
         return "[FILTERED]" if sensitive_key?(key)
+        # A phone, an address, an IP (PersonalFields): never its value, at any depth.
+        return EzLogsAgent::PersonalFields.mask_value(value) if EzLogsAgent::PersonalFields.personal_key?(key)
         return sanitize_nested_object(value, depth) if value.is_a?(Hash)
         return sanitize_array_value(value, depth) if value.is_a?(Array)
         return value if primitive?(value)
@@ -214,7 +216,8 @@ module EzLogsAgent
 
         # Top-level array uses the same array-rules so giant arg lists
         # truncate to a preview-with-count rather than ship verbatim.
-        sanitize_array_value(mask_secret_call_args(args), 0)
+        # Phones and IPs passed by position (an SMS job's "+40 721 000 333"): no name says what they are.
+        EzLogsAgent::PersonalFields.mask_text_deep(sanitize_array_value(mask_secret_call_args(args), 0))
       end
 
       # Check whether a key matches a sensitive pattern. Public so the

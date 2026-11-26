@@ -32,7 +32,9 @@ person, an AI agent or the system. On top of that you get:
 - **Shares:** signed links, embeds and signed audit exports.
 
 The agent only reads. It never changes anything in your app, never blocks a request, and drops
-passwords, tokens and other secrets before anything leaves your app. Same wire format as the
+passwords, tokens and other secrets before anything leaves your app. From 0.2.24 it also masks
+phone numbers, addresses, birth dates, IP addresses and identity-document numbers: EZLogs records
+that one changed, never its value. Same wire format as the
 [Next.js agent](https://github.com/dezsirazvan/ez_logs_agent_nextjs), so a Rails back end and a
 Next.js front end show up in one timeline.
 
@@ -194,6 +196,15 @@ Every incoming HTTP request, with intelligent noise filtering:
   - Keys are checked the same way (two keys masked alike both stay: `[FILTERED]`, `[FILTERED] 2`), and anything nested deeper than 8 levels is sent as `[Object]`. Error messages are cut to 4 KB like every other string.
   What this costs, on purpose: a URL's query and fragment are dropped even when they are ordinary data (`youtube.com/watch?v=…` reads as `youtube.com/watch`); any 15-16 digit number that passes Luhn is masked, so are some order ids and IMEIs; a slug, username or random id of 16+ characters with mixed case and digits inside a link in a value (a nanoid, `github.com/JohnDoe2024Developer`) is masked; file names are not. Not masked: a token in the request's own route path (`GET /reset/<token>`), a known limit until the agents send the route pattern; a link without `scheme://` inside a sentence (`see /reset?token=…`), a text that is not a URL (`reset_password_token=abc`; its key is still filtered by name), and a short lowercase or letters-only word after `Bearer` / `Basic` (`Bearer of bad news`, `Basic Monthly`, `Basic 2`; this also lets through a real but unusual credential such as `Bearer abcdef`).
 
+
+**Personal values (0.2.24):** phone numbers, postal addresses (street, address lines, house number, postcode or zip), precise locations (latitude, longitude), birth dates, IP addresses and identity-document numbers (passport, national, tax or VAT id, ID card, driver's licence) are sent as `[FILTERED]`. A change to one is still sent, without its values, so EZLogs reads "changed the phone", "set the address", "removed the phone", never the number.
+
+  - **By name:** the same rule as the Next.js agent, the Supabase install and the EZLogs server (`EzLogsAgent::PersonalFields`). It applies to row changes and new rows, `update_all` SET values and WHERE binds, request params and GraphQL variables at any depth, and job arguments by key. A phone written with its country code (`+40 721 000 333`) or an IP address passed to a job by position is masked too.
+  - **Not masked:** a key ending in `id`, `ids`, `uuid`, `type`, `kind`, `count`, `at`, `status`, `state`, `verified` or `confirmed` (`address_id`, `phone_confirmed_at`, `phone_status`), an email (`email`, `email_address`: it names who did what), and `nil`, blank and true/false values (`phone_verified: true`).
+  - **By model:** a model or table that is itself a list of phones, addresses or IPs (`PhoneNumber`, `user_addresses`) has its value columns treated as personal, and its records are never named by their values.
+  - The EZLogs server applies the same rule on arrival, so with an older agent version these values are still never stored.
+  - The IP address of each request is still sent with it (`remote_ip`): the EZLogs server drops it on arrival and never stores it.
+  What this costs, on purpose: the rule reads names, not intent, so a business's own address or phone is hidden too; searching EZLogs for a phone number finds nothing; there is no switch to send these values. Health or other special-category data can't be recognised by a column name: leave it out with `excluded_tables` or `excluded_graphql_variable_keys` (any key name, everywhere).
 
 **Note on GraphQL:** All GraphQL operations (queries, mutations, subscriptions) are captured. The server classifies queries as "background" significance, allowing users to toggle their visibility in the UI since they're typically read-only operations.
 
@@ -473,7 +484,7 @@ EzLogsAgent.configure do |config|
 end
 ```
 
-Never an email, a phone number, a password, a token or other secret: names show on shared links.
+Never an email, a phone number, an address, a password, a token or other secret: names show on shared links. From 0.2.24 a personal column (phone, address, …) is never used as a name.
 
 ### How It Works
 

@@ -175,7 +175,7 @@ module EzLogsAgent
           meaningful = filter_meaningful_changes(changes, model)
           return if meaningful.empty?
 
-          context = build_change_context(meaningful)
+          context = build_change_context(meaningful, model)
           context[:display_name] = resolve_display_name(model)
           capture_outside_callbacks(model, "update", context.compact)
         rescue StandardError => e
@@ -301,11 +301,16 @@ module EzLogsAgent
         end
 
         def resolve_display_name(model)
+          # A row of a list of phones or addresses would be named by the number or the street.
+          return nil if personal_table_name(model)
+
           # Check for configured custom field (memoized list, see install).
           custom_field = @display_name_for[model.class.name]
 
-          # A name shows on shared links and in MCP: never read one from a secret-named attribute.
-          if custom_field && !EzLogsAgent::SensitivePatterns.match?(custom_field) && model.respond_to?(custom_field)
+          # A name shows on shared links and in MCP: never read one from a secret-named or personal
+          # attribute (a phone, an address).
+          if custom_field && !EzLogsAgent::SensitivePatterns.match?(custom_field) &&
+             !EzLogsAgent::PersonalFields.personal_key?(custom_field) && model.respond_to?(custom_field)
             value = model.public_send(custom_field)
             return value.to_s if value.present?
           end
@@ -314,7 +319,7 @@ module EzLogsAgent
           # name → title → number → label → <model>_number (Billing::Invoice: "billing_invoice_number",
           # as its table billing_invoices reads on the server), never a secret-named one ("card_number").
           [:name, :title, :number, :label, :"#{singular_name(model)}_number"].each do |attr|
-            next if EzLogsAgent::SensitivePatterns.match?(attr) || !model.respond_to?(attr)
+            next if EzLogsAgent::SensitivePatterns.match?(attr) || EzLogsAgent::PersonalFields.personal_key?(attr) || !model.respond_to?(attr)
 
             value = model.public_send(attr)
             return value.to_s if value.present?
@@ -352,7 +357,7 @@ module EzLogsAgent
           return nil if meaningful_changes.empty?
 
           # Build context with all meaningful changes
-          build_change_context(meaningful_changes)
+          build_change_context(meaningful_changes, model)
         rescue StandardError => e
           EzLogsAgent::Logger.error("[DatabaseCapturer] extract_change_context failed: #{e.class} - #{e.message}")
           nil
@@ -383,8 +388,11 @@ module EzLogsAgent
 
           return nil if meaningful_attrs.empty?
 
-          # Format values for JSON
-          formatted_attrs = meaningful_attrs.transform_values { |v| format_value_for_json(v) }
+          # Format values for JSON; a personal field's value never leaves the app (PersonalFields)
+          table = personal_table_name(model)
+          formatted_attrs = meaningful_attrs.to_h do |attribute, v|
+            [attribute, EzLogsAgent::PersonalFields.personal_column?(attribute, table) ? EzLogsAgent::PersonalFields.mask_value(v) : EzLogsAgent::PersonalFields.mask_nested(format_value_for_json(v))]
+          end
 
           { initial_attributes: formatted_attrs }
         rescue StandardError => e
@@ -522,16 +530,33 @@ module EzLogsAgent
         #
         # @param meaningful_changes [Array<Array>] Array of [attribute, [from, to]] pairs
         # @return [Hash] Context hash with changes array
-        def build_change_context(meaningful_changes)
+        def build_change_context(meaningful_changes, model = nil)
+          table = personal_table_name(model)
           changes = meaningful_changes.map do |attribute, (from, to)|
+            # A personal field: the change, never the values (only changed values reach here).
+            if EzLogsAgent::PersonalFields.personal_column?(attribute, table)
+              next { attribute: attribute.to_s, from: EzLogsAgent::PersonalFields.mask_value(from), to: EzLogsAgent::PersonalFields.mask_value(to) }
+            end
+
             {
               attribute: attribute.to_s,
-              from: format_value_for_json(from),
-              to: format_value_for_json(to)
+              from: EzLogsAgent::PersonalFields.mask_nested(format_value_for_json(from)),
+              to: EzLogsAgent::PersonalFields.mask_nested(format_value_for_json(to))
             }
           end
 
           { changes: changes }
+        end
+
+        # The model's name when it is a list of phones, addresses or IPs ("PhoneNumber"): its value
+        # columns are personal. Nil otherwise.
+        def personal_table_name(model)
+          return nil unless model
+
+          names = [model.class.name, (model.class.table_name if model.class.respond_to?(:table_name))]
+          names.find { |name| EzLogsAgent::PersonalFields.personal_table?(name) }
+        rescue StandardError
+          nil
         end
 
         # Formats a value for JSON serialization

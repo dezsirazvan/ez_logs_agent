@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.24] — 2026-11-26
+
+### Privacy
+- **Phone numbers, addresses, birth dates, IP addresses and identity-document numbers never leave your app.** (The IP address of each request still reaches the EZLogs server, which drops it on arrival: it is never stored.) A change to one is still sent, without its values, so EZLogs reads "Ana changed her phone" (or "set", "removed"), never the number. The same rule runs on the EZLogs server (which now masks these on arrival from every agent version), in ezlogs-nextjs and in the Supabase install, checked against one shared list of column names (`spec/fixtures/personal_key_vectors.json`). `EzLogsAgent::PersonalFields` decides:
+  - **By name:** a key with the word `phone`, `telephone`, `mobile` (alone or as a number), `fax`, `msisdn`, `address` (not `email_address`), `addr`, `street`, `line1`…, `house_number`, `postcode` / `postal_code` / `zip` / `zip_code`, `birth` / `birthday` / `born` / `dob`, `passport`, `ip` / `ips` / `ipv4` / `ipv6` / `remote_addr` / `forwarded_for`, `latitude` / `longitude` / `lat` / `lng`, or a tax, VAT, national, ID-card, document, fiscal or driver's licence number. Not a key that ends in `id`, `ids`, `uuid`, `type`, `kind`, `count`, `at`, `status`, `state`, `verified` or `confirmed` (`address_id`, `phone_confirmed_at`, `phone_status` stay), nor one naming an email (unless a phone shares it: `email_or_phone`).
+  - **By model:** a model or table that is a list of phones, addresses or IPs (`PhoneNumber`, `Customer::Address`, `user_addresses`) has its value columns treated the same way (its `number` is the phone), and its rows are never named by their values.
+  - **Where:** row changes and new rows (`changes`, `initial_attributes`), bulk `update_all` SET values and WHERE binds, request params and GraphQL variables at any depth, and job arguments; a phone written with its country code (`+40 721 000 333`) or an IP address passed to a job by position is masked too. `display_name_for` never reads a personal column.
+  - **Inside values:** a personal key inside any other value (a json column, a job argument's hash) is masked too, at every depth.
+  - **Values:** replaced by `[FILTERED]`; `nil`, blank strings and booleans are kept (`phone_verified: true`, "removed the phone").
+  What this costs, on purpose: a business's own address or phone (a venue's street) is hidden too, since the rule reads names, not intent; searching EZLogs for a phone number finds nothing. Leave out more with `excluded_graphql_variable_keys` (any key name, everywhere) or `excluded_tables`; there is no switch to send these values.
+
 ## [0.2.23] — 2026-11-25
 
 ### Security

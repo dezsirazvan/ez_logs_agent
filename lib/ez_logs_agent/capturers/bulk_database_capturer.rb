@@ -432,8 +432,10 @@ module EzLogsAgent
                 "[FILTERED]"
               elsif ::EzLogsAgent::SensitivePatterns.match?(col)
                 "[FILTERED]"
+              elsif ::EzLogsAgent::PersonalFields.personal_column?(col, model_class.name)
+                ::EzLogsAgent::PersonalFields.mask_value(value) # "set the phone", never the number
               else
-                format_value_for_json(value)
+                ::EzLogsAgent::PersonalFields.mask_nested(format_value_for_json(value))
               end
           end
         end
@@ -450,6 +452,8 @@ module EzLogsAgent
               if col && (::EzLogsAgent::EncryptedAttributes.attribute?(model_class, col) ||
                          ::EzLogsAgent::SensitivePatterns.match?(col))
                 "[FILTERED]"
+              elsif col && ::EzLogsAgent::PersonalFields.personal_column?(col, model_class.name)
+                ::EzLogsAgent::PersonalFields.mask_value(value)
               else
                 format_value_for_json(value)
               end
