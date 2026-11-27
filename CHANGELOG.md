@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.25] — 2026-11-27
+
+### Fixed
+- **A job run inside an excluded job is excluded with it.** A job in `excluded_job_classes` that runs another job inline (`perform_now`, the inline adapter, `Sidekiq::Testing.inline!`) no longer sends that job as an action of its own. Before, a scheduler excluded for being housekeeping still filled the log with the job it ran every few minutes. The same job run on its own is captured as before, and a job an excluded request runs is still its own action.
+
 ## [0.2.24] — 2026-11-26
 
 ### Privacy

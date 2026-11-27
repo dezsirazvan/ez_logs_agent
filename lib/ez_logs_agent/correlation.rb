@@ -67,22 +67,29 @@ module EzLogsAgent
     end
 
     EXCLUDED_KEY = :ez_logs_excluded_request
+    EXCLUDED_JOB_KEY = :ez_logs_excluded_job
 
     # While the app handles a request it excluded (config.excluded_paths), nothing its thread emits is
     # captured: its database writes and job enqueues would otherwise ship with no correlation, never
     # shown yet still stored. Restores the outer state, so a nested excluded call keeps the outer one.
     # shortcut: work on other threads, or in a streamed body after `call` returns, is still captured
     # uncorrelated; wrap the body / propagate the flag if that shows up in practice.
-    def self.excluding
+    # job: true for an excluded job, whose own inline jobs (perform_now) are housekeeping with it; a
+    # job run inside an excluded request is still its own action (agent 0.2.6).
+    def self.excluding(job: false)
       previous = RequestStore.store[EXCLUDED_KEY]
+      previous_job = RequestStore.store[EXCLUDED_JOB_KEY]
       RequestStore.store[EXCLUDED_KEY] = true
+      RequestStore.store[EXCLUDED_JOB_KEY] = true if job
       yield
     ensure
-      if previous.nil?
-        RequestStore.store.delete(EXCLUDED_KEY)
-      else
-        RequestStore.store[EXCLUDED_KEY] = previous
+      { EXCLUDED_KEY => previous, EXCLUDED_JOB_KEY => previous_job }.each do |key, value|
+        value.nil? ? RequestStore.store.delete(key) : RequestStore.store[key] = value
       end
+    end
+
+    def self.in_excluded_job?
+      RequestStore.store[EXCLUDED_JOB_KEY] == true
     end
 
     def self.excluded?

@@ -116,13 +116,15 @@ module EzLogsAgent
 
           # Skip capture if disabled
           return yield unless EzLogsAgent.configuration.capture_jobs
+          # Run inline by an excluded job: housekeeping with it
+          return yield if EzLogsAgent::Correlation.in_excluded_job?
 
           # Skip excluded job classes (health checks, infrastructure jobs).
           # Match against the underlying ActiveJob class too, not just the wrapper.
           if excluded_job_class?(worker, job)
             EzLogsAgent::Logger.debug("[JobCapturer::ServerMiddleware] Skipping capture (excluded job class: #{resolve_job_class(worker, job)})")
             # Nothing it writes is sent either (as an excluded path): never shown, it would only be stored.
-            return EzLogsAgent::Correlation.excluding { yield }
+            return EzLogsAgent::Correlation.excluding(job: true) { yield }
           end
 
           # Restore correlation_id from job payload (or generate new one); a job run more than an hour

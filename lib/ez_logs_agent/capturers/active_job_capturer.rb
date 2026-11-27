@@ -135,6 +135,9 @@ module EzLogsAgent
           # fall back to a live config read so the behavior matches.
           enabled = defined?(@capture_enabled) ? @capture_enabled : EzLogsAgent.configuration.capture_jobs
           return block.call unless enabled
+          # Run by an excluded job (`perform_now`, or the inline adapter): housekeeping with it, or it
+          # would start an action of its own.
+          return block.call if EzLogsAgent::Correlation.in_excluded_job?
 
           if sidekiq_adapter?(job)
             EzLogsAgent::Logger.debug("[ActiveJobCapturer] Skipping capture (Sidekiq adapter)")
@@ -144,7 +147,7 @@ module EzLogsAgent
           if excluded_job_class?(job)
             EzLogsAgent::Logger.debug("[ActiveJobCapturer] Skipping capture (excluded job class: #{job.class.name})")
             # Nothing it writes is sent either (as an excluded path): never shown, it would only be stored.
-            return EzLogsAgent::Correlation.excluding { block.call }
+            return EzLogsAgent::Correlation.excluding(job: true) { block.call }
           end
 
 
