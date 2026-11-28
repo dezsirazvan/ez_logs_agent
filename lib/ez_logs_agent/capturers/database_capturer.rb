@@ -55,6 +55,12 @@ module EzLogsAgent
         last_sign_in_ip
       ].freeze
 
+      # A stored password hash (Devise encrypted_password, has_secure_password's *password_digest, ...).
+      # Same rule as ezlogs-nextjs (db/shared.ts), camelCase included.
+      PASSWORD_HASH_COLUMN = /\A(?:encrypted_?password|(?:\w+_)?password_?digest|(?:hashed|crypted)_?password|password_?(?:hash|crypted))\z/i
+      # A password change is only a fact, as the Supabase install's pw_changed: never the hash.
+      PASSWORD_CHANGE = ["password", %w[[FILTERED] [FILTERED]]].freeze
+
       # Foreign key changes are now captured because they represent meaningful
       # relationship changes (e.g., profile_id, user_id).
       # Previously we filtered them out, but this loses important context.
@@ -354,6 +360,7 @@ module EzLogsAgent
           # Find meaningful changes (excludes encrypted columns + sensitive
           # name patterns — see meaningful_attribute? / encrypted_attribute?)
           meaningful_changes = filter_meaningful_changes(changes, model)
+          meaningful_changes << PASSWORD_CHANGE if password_changed?(changes)
           return nil if meaningful_changes.empty?
 
           # Build context with all meaningful changes
@@ -413,6 +420,10 @@ module EzLogsAgent
               scalar_values?(from, to) &&
               values_actually_changed?(from, to)
           end.to_a
+        end
+
+        def password_changed?(changes)
+          changes.any? { |attribute, (from, to)| attribute.to_s.match?(PASSWORD_HASH_COLUMN) && from != to }
         end
 
         # Checks if an attribute is meaningful (not technical/ignored).

@@ -46,7 +46,7 @@ module EzLogsAgent
       restore retrieve reverse search send start stop sync update upload validate verify
       void
     ].freeze
-    API_NOUNS = %w[auth balance chat checkout item link token].freeze
+    API_NOUNS = %w[auth balance chat checkout graphql item link token].freeze
     # An API prefix: "api" or a version ("v1", "v2"), kept wherever it sits ("/api/v2/models"):
     # never a name. A date version ("2010-04-01") stays an id.
     API_PREFIX = /\A(?:api|v\d{1,2})\z/

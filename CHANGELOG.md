@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.26] — 2026-11-27
+
+### Changed
+- **A password change is shown, never its hash.** When a stored password hash changes (Devise `encrypted_password`, `has_secure_password`'s `password_digest` or `<name>_password_digest`, `hashed_password`, `password_hash`), the row change carries one fact, `password` with both values `[FILTERED]`, so EZLogs reads "changed the password". Before, the change was dropped entirely and a password reset read as an empty update. The hash itself is still never sent. Same rule as ezlogs-nextjs 0.4.20 and the Supabase install's `pw_changed`.
+- **A GraphQL endpoint reads as `/graphql`.** In an outbound call's path pattern, `graphql` is a kept API word where a collection sits (`/graphql`, `/api/v2/graphql`), instead of `/:id`. Same table as the server and ezlogs-nextjs.
+
 ## [0.2.25] — 2026-11-27
 
 ### Fixed
